@@ -3,8 +3,8 @@ package store
 import (
 	"sync"
 
-	"github.com/nicoddemus/github-desktop-tui/internal/config"
-	"github.com/nicoddemus/github-desktop-tui/pkg/types"
+	"github.com/ElioNeto/github-desktop-tui/internal/config"
+	"github.com/ElioNeto/github-desktop-tui/pkg/types"
 )
 
 // Store is the central application state container.

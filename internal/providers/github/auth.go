@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/nicoddemus/github-desktop-tui/internal/providers"
+	"github.com/ElioNeto/github-desktop-tui/internal/providers"
 )
 
 // Auth handles GitHub authentication.

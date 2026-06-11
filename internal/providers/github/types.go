@@ -3,7 +3,7 @@ package github
 import (
 	"time"
 
-	"github.com/nicoddemus/github-desktop-tui/pkg/types"
+	"github.com/ElioNeto/github-desktop-tui/pkg/types"
 )
 
 // GitHub API response types

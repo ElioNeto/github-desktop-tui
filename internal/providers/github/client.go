@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/nicoddemus/github-desktop-tui/internal/providers"
-	"github.com/nicoddemus/github-desktop-tui/pkg/types"
+	"github.com/ElioNeto/github-desktop-tui/internal/providers"
+	"github.com/ElioNeto/github-desktop-tui/pkg/types"
 )
 
 const (

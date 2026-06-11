@@ -3,7 +3,7 @@ package providers
 import (
 	"context"
 
-	"github.com/nicoddemus/github-desktop-tui/pkg/types"
+	"github.com/ElioNeto/github-desktop-tui/pkg/types"
 )
 
 // AuthType represents the authentication method used by a provider.

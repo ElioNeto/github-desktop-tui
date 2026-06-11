@@ -6,9 +6,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	gitlocal "github.com/nicoddemus/github-desktop-tui/internal/git"
-	"github.com/nicoddemus/github-desktop-tui/internal/store"
-	"github.com/nicoddemus/github-desktop-tui/internal/tui"
+	gitlocal "github.com/ElioNeto/github-desktop-tui/internal/git"
+	"github.com/ElioNeto/github-desktop-tui/internal/store"
+	"github.com/ElioNeto/github-desktop-tui/internal/tui"
 )
 
 // Run starts the TUI application.

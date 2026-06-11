@@ -18,7 +18,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 
-	"github.com/nicoddemus/github-desktop-tui/pkg/types"
+	"github.com/ElioNeto/github-desktop-tui/pkg/types"
 )
 
 // ---------------------------------------------------------------------------

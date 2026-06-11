@@ -8,9 +8,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	gitlocal "github.com/nicoddemus/github-desktop-tui/internal/git"
-	"github.com/nicoddemus/github-desktop-tui/internal/store"
-	"github.com/nicoddemus/github-desktop-tui/pkg/types"
+	gitlocal "github.com/ElioNeto/github-desktop-tui/internal/git"
+	"github.com/ElioNeto/github-desktop-tui/internal/store"
+	"github.com/ElioNeto/github-desktop-tui/pkg/types"
 )
 
 // ── GitHub Dark Mode Colors ──

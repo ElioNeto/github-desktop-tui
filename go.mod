@@ -1,4 +1,4 @@
-module github.com/nicoddemus/github-desktop-tui
+module github.com/ElioNeto/github-desktop-tui
 
 go 1.24.2
 
