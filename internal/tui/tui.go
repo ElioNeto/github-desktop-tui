@@ -13,7 +13,33 @@ import (
 	"github.com/nicoddemus/github-desktop-tui/pkg/types"
 )
 
-// focusArea identifies which panel has focus.
+// ── GitHub Dark Mode Colors ──
+var (
+	ghBg       = lipgloss.Color("#0d1117")
+	ghSurface  = lipgloss.Color("#161b22")
+	ghBorder   = lipgloss.Color("#30363d")
+	ghBorderHi = lipgloss.Color("#58a6ff") // active border
+	ghText     = lipgloss.Color("#e6edf3")
+	ghMuted    = lipgloss.Color("#8b949e")
+	ghDim      = lipgloss.Color("#484f58")
+	ghBlue     = lipgloss.Color("#58a6ff")
+	ghGreen    = lipgloss.Color("#3fb950")
+	ghRed      = lipgloss.Color("#f85149")
+	ghYellow   = lipgloss.Color("#d29922")
+	ghOrange   = lipgloss.Color("#db6d28")
+	ghPurple   = lipgloss.Color("#bc8cff")
+	ghCyan     = lipgloss.Color("#39d2c0")
+	ghSelBg    = lipgloss.Color("#1f2d47")
+	ghHeaderBg = lipgloss.Color("#161b22")
+)
+
+// Graph colors for commit dots (GitHub-inspired palette)
+var graphDotColors = []string{
+	"#58a6ff", "#3fb950", "#d29922", "#bc8cff",
+	"#39d2c0", "#db6d28", "#f85149", "#58a6ff",
+}
+
+// ── Focus area ──
 type focusArea int
 
 const (
@@ -22,80 +48,92 @@ const (
 	focusDetails
 )
 
-// model is the root Bubble Tea model.
+// ── Model ──
 type model struct {
 	width, height int
 	focus         focusArea
 	ready         bool
 
-	gitOps  gitlocal.GitOperations
-	store   *store.Store
-	repos   []*store.TrackedRepo
-	repoIdx int
+	gitOps gitlocal.GitOperations
+	store  *store.Store
 
-	branches []*types.Branch
-	commits  []*types.Commit
-	graph    []*types.GraphRow
-	changes  []*types.FileChange
-	selFile  int
-
-	detailCommit int // index of selected commit in history
+	branches      []*types.Branch
+	commits       []*types.Commit
+	graph         []*types.GraphRow
+	changes       []*types.FileChange
+	detailCommit  int
+	notification  string
+	notifDeadline int // tick countdown
 }
 
-// New creates a new TUI model.
 func New(gitOps gitlocal.GitOperations, st *store.Store) tea.Model {
-	return newModel(gitOps, st)
-}
-
-func newModel(gitOps gitlocal.GitOperations, st *store.Store) model {
-	return model{
-		gitOps:       gitOps,
-		store:        st,
-		repos:        make([]*store.TrackedRepo, 0),
-		branches:     make([]*types.Branch, 0),
-		commits:      make([]*types.Commit, 0),
-		graph:        make([]*types.GraphRow, 0),
-		changes:      make([]*types.FileChange, 0),
-		detailCommit: -1,
-		selFile:      -1,
-		focus:        focusHistory,
+	return &model{
+		gitOps:      gitOps,
+		store:       st,
+		branches:    []*types.Branch{},
+		commits:     []*types.Commit{},
+		graph:       []*types.GraphRow{},
+		changes:     []*types.FileChange{},
+		detailCommit: 0,
+		focus:       focusHistory,
 	}
 }
 
 // ── Messages ──
-
 type dataLoadedMsg struct {
 	branches []*types.Branch
 	commits  []*types.Commit
 	graph    []*types.GraphRow
 	changes  []*types.FileChange
+	err      error
 }
 
-type errMsg struct{ err error }
+type notifMsg struct{ text string }
 
 // ── Init ──
-
-func (m model) Init() tea.Cmd {
+func (m *model) Init() tea.Cmd {
 	return tea.Batch(
 		tea.EnterAltScreen,
 		m.loadData(),
 	)
 }
 
-func (m model) loadData() tea.Cmd {
+func (m *model) loadData() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.TODO()
-		branches, _ := m.gitOps.Branches(ctx)
-		commits, _ := m.gitOps.Log(ctx, &gitlocal.LogOptions{Limit: 100})
-		graph, _ := m.gitOps.GraphLog(ctx, &gitlocal.LogOptions{Limit: 100})
-		changes, _ := m.gitOps.Status(ctx)
-		return dataLoadedMsg{branches, commits, graph, changes}
+
+		branches, berr := m.gitOps.Branches(ctx)
+		if berr != nil {
+			return dataLoadedMsg{err: fmt.Errorf("branches: %w", berr)}
+		}
+
+		commits, cerr := m.gitOps.Log(ctx, &gitlocal.LogOptions{Limit: 100})
+		if cerr != nil {
+			return dataLoadedMsg{err: fmt.Errorf("commits: %w", cerr)}
+		}
+
+		graph, gerr := m.gitOps.GraphLog(ctx, &gitlocal.LogOptions{Limit: 100})
+		if gerr != nil {
+			return dataLoadedMsg{err: fmt.Errorf("graph: %w", gerr)}
+		}
+
+		changes, serr := m.gitOps.Status(ctx)
+		if serr != nil {
+			// Non-fatal: changes might be empty
+			changes = []*types.FileChange{}
+		}
+
+		return dataLoadedMsg{
+			branches: branches,
+			commits:  commits,
+			graph:    graph,
+			changes:  changes,
+		}
 	}
 }
 
 // ── Update ──
-
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -104,28 +142,33 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case dataLoadedMsg:
+		if msg.err != nil {
+			m.notification = fmt.Sprintf("Error: %v", msg.err)
+			return m, nil
+		}
 		m.branches = msg.branches
 		m.commits = msg.commits
 		m.graph = msg.graph
 		m.changes = msg.changes
-		if len(m.commits) > 0 && m.detailCommit < 0 {
+		if m.detailCommit >= len(m.commits) {
 			m.detailCommit = 0
 		}
+		_ = msg // use all fields
 		return m, nil
 
-	case errMsg:
+	case notifMsg:
+		m.notification = msg.text
 		return m, nil
 
 	case tea.KeyMsg:
-		return m.handleKeyMsg(msg)
+		return m.handleKey(msg)
 	}
 
 	return m, nil
 }
 
 // ── Key handling ──
-
-func (m model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "q", "ctrl+c":
 		return m, tea.Quit
@@ -133,21 +176,18 @@ func (m model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "tab":
 		m.focus = (m.focus + 1) % 3
 		return m, nil
-
 	case "shift+tab":
 		m.focus = (m.focus - 1 + 3) % 3
 		return m, nil
 
-	case "r":
-		return m, m.loadData()
-
-	// Navigation
 	case "up", "k":
-		return m.navigateUp()
+		return m.navUp()
 	case "down", "j":
-		return m.navigateDown()
+		return m.navDown()
 
-	// Git operations
+	case "r":
+		m.notification = ""
+		return m, m.loadData()
 	case "c":
 		return m, m.doCommit()
 	case "p":
@@ -155,152 +195,141 @@ func (m model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "l":
 		return m, m.doPull()
 	case "d":
-		return m, m.doDiff()
+		if m.detailCommit < len(m.commits) {
+			return m, m.doShowDiff()
+		}
 	}
 
 	return m, nil
 }
 
-func (m model) navigateUp() (tea.Model, tea.Cmd) {
+func (m *model) navUp() (tea.Model, tea.Cmd) {
 	switch m.focus {
 	case focusHistory:
 		if m.detailCommit > 0 {
 			m.detailCommit--
 		}
 	case focusSidebar:
-		if m.repoIdx > 0 {
-			m.repoIdx--
-		}
+		// no-op for now
 	}
 	return m, nil
 }
 
-func (m model) navigateDown() (tea.Model, tea.Cmd) {
+func (m *model) navDown() (tea.Model, tea.Cmd) {
 	switch m.focus {
 	case focusHistory:
 		if m.detailCommit < len(m.commits)-1 {
 			m.detailCommit++
 		}
-	case focusSidebar:
-		if m.repoIdx < len(m.repos)-1 {
-			m.repoIdx++
-		}
 	}
 	return m, nil
 }
 
-func (m model) doCommit() tea.Cmd {
+func (m *model) doCommit() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.TODO()
-		// Stage all tracked changes
 		for _, fc := range m.changes {
 			if !fc.Staged {
 				if err := m.gitOps.Stage(ctx, fc.Path); err != nil {
-					return errMsg{err}
+					return notifMsg{fmt.Sprintf("Stage error: %v", err)}
 				}
 			}
 		}
-		_, err := m.gitOps.Commit(ctx, "feat: WIP")
-		if err != nil {
-			return errMsg{err}
+		if _, err := m.gitOps.Commit(ctx, "feat: WIP"); err != nil {
+			return notifMsg{fmt.Sprintf("Commit error: %v", err)}
 		}
-		// Reload
 		return m.loadData()()
 	}
 }
 
-func (m model) doPush() tea.Cmd {
+func (m *model) doPush() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.TODO()
-		branch := ""
+		branch := "main"
 		for _, b := range m.branches {
 			if b.IsActive {
 				branch = b.Name
 				break
 			}
 		}
-		if branch == "" {
-			branch = "main"
-		}
 		if err := m.gitOps.Push(ctx, "origin", branch, false); err != nil {
-			return errMsg{err}
+			return notifMsg{fmt.Sprintf("Push error: %v", err)}
 		}
 		return m.loadData()()
 	}
 }
 
-func (m model) doPull() tea.Cmd {
+func (m *model) doPull() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.TODO()
 		if err := m.gitOps.Pull(ctx, "origin", ""); err != nil {
-			return errMsg{err}
+			return notifMsg{fmt.Sprintf("Pull error: %v", err)}
 		}
 		return m.loadData()()
 	}
 }
 
-func (m model) doDiff() tea.Cmd {
+func (m *model) doShowDiff() tea.Cmd {
 	return func() tea.Msg {
-		// Dummy for now
-		return nil
+		// TODO: implement diff view
+		return notifMsg{"Diff view: press any key to close (not yet implemented)"}
 	}
 }
 
 // ── View ──
-
-func (m model) View() string {
+func (m *model) View() string {
 	if !m.ready {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render("Loading...")
+		return lipgloss.NewStyle().Foreground(ghMuted).Background(ghBg).Render(" Loading...")
 	}
 
-	// Layout dimensions
+	// Layout
 	sidebarW := max(26, m.width/5)
 	detailsW := max(32, m.width/4)
 	centerW := m.width - sidebarW - detailsW - 4
+	panelH := m.height - 3
 
-	// Panel styles
-	active := lipgloss.NewStyle().
+	// ── Panel builder ──
+	baseStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#7AA2F7")).
+		BorderForeground(ghBorder).
 		Padding(0, 1).
-		Width(m.width)
+		Background(ghBg)
 
-	inactive := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#3B4252")).
-		Padding(0, 1).
-		Width(m.width)
+	activeStyle := baseStyle.BorderForeground(ghBorderHi)
 
-	// With fixed height, panels fill the available space
-	panelH := m.height - 3 // header + 1 padding
-
-	buildPanel := func(w int, isActive bool, content string) string {
-		s := inactive.Width(w).Height(panelH)
-		if isActive {
-			s = active.Width(w).Height(panelH)
+	makePanel := func(w int, active bool, content string) string {
+		s := baseStyle.Width(w).Height(panelH)
+		if active {
+			s = activeStyle.Width(w).Height(panelH)
 		}
 		return s.Render(content)
 	}
 
-	// Build content
-	leftContent := renderSidebar(m)
-	centerContent := renderHistory(m)
-	rightContent := renderDetails(m)
-
-	// Header bar
+	// ── Header ──
 	header := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#C5C8C6")).
-		Background(lipgloss.Color("#1F2430")).
+		Foreground(ghMuted).
+		Background(ghHeaderBg).
 		Padding(0, 2).
 		Width(m.width).
-		Render(fmt.Sprintf(" git-tui  •  tab:focus  ↑↓:nav  c:commit  p:push  l:pull  d:diff  r:refresh  q:quit "))
+		Render(" git-tui  ◆  tab:focus  ↑↓:nav  c:commit  p:push  l:pull  d:diff  r:refresh  q:quit ")
 
-	// Assemble panels
-	left := buildPanel(sidebarW, m.focus == focusSidebar, leftContent)
-	center := buildPanel(centerW, m.focus == focusHistory, centerContent)
-	right := buildPanel(detailsW, m.focus == focusDetails, rightContent)
+	// ── Panels ──
+	left := makePanel(sidebarW, m.focus == focusSidebar, renderSidebar(m))
+	center := makePanel(centerW, m.focus == focusHistory, renderHistory(m))
+	right := makePanel(detailsW, m.focus == focusDetails, renderDetails(m))
 
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, center, right)
+
+	// ── Notification bar ──
+	if m.notification != "" {
+		notifStyle := lipgloss.NewStyle().
+			Foreground(ghRed).
+			Background(ghBg).
+			Padding(0, 2).
+			Width(m.width)
+		return lipgloss.JoinVertical(lipgloss.Left, header, body,
+			notifStyle.Render(" ⚠  "+m.notification))
+	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, header, body)
 }
@@ -312,40 +341,45 @@ func max(a, b int) int {
 	return b
 }
 
-// ── Panel renderers ──
+// ══════════════════════════════════════════════════════════════════════
+//  SIDEBAR
+// ══════════════════════════════════════════════════════════════════════
 
-func renderSidebar(m model) string {
+func renderSidebar(m *model) string {
 	var b strings.Builder
 
-	b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#7AA2F7")).Bold(true).Render(" Branches "))
+	// ── Branch list ──
+	b.WriteString(sectionColor.Render(" Branches "))
 	b.WriteString("\n\n")
 
 	for _, br := range m.branches {
 		if br.IsActive {
-			mark := "●"
-			style := lipgloss.NewStyle().Foreground(lipgloss.Color("#7AA2F7")).Bold(true)
 			ab := ""
 			if br.Ahead > 0 || br.Behind > 0 {
-				ab = fmt.Sprintf("  ↑%d↓%d", br.Ahead, br.Behind)
+				ab = dimStyle.Render(fmt.Sprintf(" ↑%d↓%d", br.Ahead, br.Behind))
 			}
-			b.WriteString(fmt.Sprintf("  %s  %s%s\n", style.Render(mark), style.Render(br.Name), lipgloss.NewStyle().Foreground(lipgloss.Color("#565F89")).Render(ab)))
+			b.WriteString(fmt.Sprintf("  %s  %s%s\n",
+				activeDot.Render("●"),
+				branchActive.Render(br.Name),
+				ab))
 		}
 	}
 
 	for _, br := range m.branches {
 		if !br.IsActive {
-			mark := "○"
-			style := lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E"))
-			b.WriteString(fmt.Sprintf("  %s  %s\n", style.Render(mark), style.Render(br.Name)))
+			b.WriteString(fmt.Sprintf("  %s  %s\n",
+				mutedStyle.Render("○"),
+				mutedStyle.Render(br.Name)))
 		}
 	}
 
+	// ── Changes ──
 	b.WriteString("\n")
-	b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#7AA2F7")).Bold(true).Render(" Changes "))
+	b.WriteString(sectionColor.Render(" Changes "))
 	b.WriteString("\n\n")
 
 	if len(m.changes) == 0 {
-		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#565F89")).Render("  Clean working tree"))
+		b.WriteString(mutedStyle.Render("  Clean working tree"))
 	} else {
 		staged := 0
 		for _, fc := range m.changes {
@@ -353,32 +387,24 @@ func renderSidebar(m model) string {
 				staged++
 			}
 		}
-		b.WriteString(fmt.Sprintf("  %s\n", lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render(fmt.Sprintf("%d files (%d staged)", len(m.changes), staged))))
+		summary := fmt.Sprintf("  %d file(s) (%d staged)", len(m.changes), staged)
+		b.WriteString(dimStyle.Render(summary))
+		b.WriteString("\n")
+
 		for _, fc := range m.changes {
-			badge := " "
-			badgeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#565F89"))
-			switch fc.Status {
-			case types.FileStatusModified:
-				badge = "M"
-				badgeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#E5C07B"))
-			case types.FileStatusAdded:
-				badge = "A"
-				badgeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#98C379"))
-			case types.FileStatusDeleted:
-				badge = "D"
-				badgeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#E06C75"))
-			case types.FileStatusUntracked:
-				badge = "?"
-				badgeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#565F89"))
-			}
-			b.WriteString(fmt.Sprintf("  %s %s\n", badgeStyle.Render(badge), lipgloss.NewStyle().Foreground(lipgloss.Color("#C5C8C6")).Render(fc.Path)))
+			badge, style := changeBadge(fc.Status)
+			b.WriteString(fmt.Sprintf("  %s %s\n", style.Render(badge), textStyle.Render(fc.Path)))
 		}
 	}
 
 	return b.String()
 }
 
-func renderHistory(m model) string {
+// ══════════════════════════════════════════════════════════════════════
+//  HISTORY (COMMIT GRAPH)
+// ══════════════════════════════════════════════════════════════════════
+
+func renderHistory(m *model) string {
 	var b strings.Builder
 
 	// Branch header
@@ -389,22 +415,24 @@ func renderHistory(m model) string {
 			break
 		}
 	}
-	b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#7AA2F7")).Bold(true).Render(" " + activeBranch + " "))
-	b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#565F89")).Render(fmt.Sprintf("%d commits", len(m.commits))))
+	b.WriteString(branchActive.Render(" "+activeBranch+" "))
+	b.WriteString(dimStyle.Render(fmt.Sprintf("%d commits", len(m.commits))))
 	b.WriteString("\n\n")
 
 	if len(m.graph) == 0 {
-		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#565F89")).Render("  No commits"))
+		b.WriteString(mutedStyle.Render("  No commits found"))
 		return b.String()
 	}
 
-	// Graph colors per column
-	graphColors := []string{"#7AA2F7", "#98C379", "#E5C07B", "#C678DD", "#56B6C2", "#D19A66", "#E06C75"}
+	// Track column colors
 	colColor := make(map[int]string)
 	colIdx := 0
 
-	// Show up to panel height - 3 lines
 	maxRows := m.height - 6
+	if maxRows < 3 {
+		maxRows = 3
+	}
+
 	commitIdx := 0
 	start := 0
 	if m.detailCommit >= maxRows {
@@ -418,122 +446,73 @@ func renderHistory(m model) string {
 	for i := start; i < end; i++ {
 		row := m.graph[i]
 
-		// Graph part
-		graphStr := ""
-		for j, ch := range row.Graph {
-			if ch == '*' {
-				if _, ok := colColor[j]; !ok {
-					colColor[j] = graphColors[colIdx%len(graphColors)]
-					colIdx++
-				}
-				dot := lipgloss.NewStyle().Foreground(lipgloss.Color(colColor[j])).Bold(true).Render("●")
-				graphStr += dot
-			} else if ch == '|' || ch == '/' || ch == '\\' || ch == '_' {
-				c := lipgloss.Color("#565F89")
-				if color, ok := colColor[j]; ok {
-					c = lipgloss.Color(color)
-				}
-				graphStr += lipgloss.NewStyle().Foreground(c).Render(string(ch))
-			} else if ch == ' ' {
-				graphStr += " "
-			} else {
-				graphStr += string(ch)
-			}
-		}
+		// Render graph
+		graphStr := renderGraphLine(row.Graph, colColor, &colIdx)
 
-		// Pad graph to consistent width
-		for len(graphStr) < 8 {
+		// Pad graph width
+		for len(graphStr) < 6 {
 			graphStr += " "
 		}
 
 		if row.IsCommit {
-			// Build commit line
-			line := graphStr
-			hash := lipgloss.NewStyle().Foreground(lipgloss.Color("#565F89")).Render(row.Hash)
 			msg := row.Message
-			avail := m.width/5*3 - len(graphStr) - 30
+			avail := m.width/3 - len(graphStr) - 30
 			if avail < 5 {
 				avail = 5
 			}
 			if len(msg) > avail {
 				msg = msg[:avail-1] + "…"
 			}
-			author := lipgloss.NewStyle().Foreground(lipgloss.Color("#565F89")).Render(row.Author)
-			time := lipgloss.NewStyle().Foreground(lipgloss.Color("#565F89")).Render(row.Time)
-			line += fmt.Sprintf(" %s %s  %s  %s", hash, msg, author, time)
+			line := fmt.Sprintf("%s %s %s  %s  %s",
+				graphStr,
+				hashStyle.Render(row.Hash),
+				textStyle.Render(msg),
+				mutedStyle.Render(row.Author),
+				mutedStyle.Render(row.Time))
 
-			// Selected highlight
 			if commitIdx == m.detailCommit {
-				b.WriteString(lipgloss.NewStyle().Background(lipgloss.Color("#2C3E50")).Render(line))
+				b.WriteString(selBgStyle.Render(line))
 			} else {
 				b.WriteString(line)
 			}
 			commitIdx++
 		} else {
-			// Continuation line (just graph)
 			b.WriteString(graphStr)
 		}
-
 		b.WriteString("\n")
 	}
 
-	// Scroll hint
 	if len(m.graph) > maxRows {
-		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#565F89")).Render(fmt.Sprintf("  ↓ %d more", len(m.graph)-end)))
+		b.WriteString(dimStyle.Render(fmt.Sprintf("  ↓ %d more", len(m.graph)-end)))
 	}
 
 	return b.String()
 }
 
-func renderDetails(m model) string {
-	var b strings.Builder
-
-	if m.detailCommit < 0 || m.detailCommit >= len(m.commits) {
-		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#565F89")).Render(" No commit selected"))
-		return b.String()
-	}
-
-	c := m.commits[m.detailCommit]
-	label := lipgloss.NewStyle().Foreground(lipgloss.Color("#565F89"))
-	value := lipgloss.NewStyle().Foreground(lipgloss.Color("#C5C8C6"))
-
-	b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#7AA2F7")).Bold(true).Render(" Commit "))
-	b.WriteString("\n\n")
-	b.WriteString(fmt.Sprintf("%s  %s\n", label.Render("Hash    "), value.Render(c.Hash[:12])))
-	b.WriteString(fmt.Sprintf("%s  %s\n", label.Render("Author  "), value.Render(c.Author)))
-	b.WriteString(fmt.Sprintf("%s  %s\n", label.Render("Date    "), value.Render(c.Timestamp.Format("02 Jan 2006 15:04"))))
-	b.WriteString(fmt.Sprintf("%s  %s\n", label.Render("Message "), value.Render(c.MessageHead)))
-
-	// Changed files
-	b.WriteString("\n")
-	b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#7AA2F7")).Bold(true).Render(" Files "))
-	b.WriteString("\n\n")
-
-	if len(m.changes) == 0 {
-		b.WriteString(label.Render("  No files changed"))
-	} else {
-		for _, fc := range m.changes {
-			badge := " "
-			badgeSty := lipgloss.NewStyle().Foreground(lipgloss.Color("#565F89"))
-			switch fc.Status {
-			case types.FileStatusModified:
-				badge = "M"
-				badgeSty = lipgloss.NewStyle().Foreground(lipgloss.Color("#E5C07B"))
-			case types.FileStatusAdded:
-				badge = "A"
-				badgeSty = lipgloss.NewStyle().Foreground(lipgloss.Color("#98C379"))
-			case types.FileStatusDeleted:
-				badge = "D"
-				badgeSty = lipgloss.NewStyle().Foreground(lipgloss.Color("#E06C75"))
-			case types.FileStatusUntracked:
-				badge = "?"
-				badgeSty = lipgloss.NewStyle().Foreground(lipgloss.Color("#565F89"))
+func renderGraphLine(graph string, colColor map[int]string, colIdx *int) string {
+	var out strings.Builder
+	for j, ch := range graph {
+		switch {
+		case ch == '*':
+			if _, ok := colColor[j]; !ok {
+				colColor[j] = graphDotColors[*colIdx%len(graphDotColors)]
+				*colIdx++
 			}
-			b.WriteString(fmt.Sprintf("  %s  %s\n", badgeSty.Render(badge), value.Render(fc.Path)))
+			out.WriteString(lipgloss.NewStyle().
+				Foreground(lipgloss.Color(colColor[j])).
+				Bold(true).
+				Render("●"))
+		case ch == '|' || ch == '/' || ch == '\\' || ch == '_':
+			c := ghDim
+			if color, ok := colColor[j]; ok {
+				c = lipgloss.Color(color)
+			}
+			out.WriteString(lipgloss.NewStyle().Foreground(c).Render(string(ch)))
+		default:
+			out.WriteString(string(ch))
 		}
 	}
-
-	return b.String()
+	return out.String()
 }
 
 func countGraphUpTo(rows []*types.GraphRow, target int) int {
@@ -547,4 +526,74 @@ func countGraphUpTo(rows []*types.GraphRow, target int) int {
 		}
 	}
 	return 0
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  DETAILS
+// ══════════════════════════════════════════════════════════════════════
+
+func renderDetails(m *model) string {
+	var b strings.Builder
+
+	if m.detailCommit < 0 || m.detailCommit >= len(m.commits) {
+		b.WriteString(mutedStyle.Render(" No commit selected"))
+		return b.String()
+	}
+
+	c := m.commits[m.detailCommit]
+
+	b.WriteString(sectionColor.Render(" Commit "))
+	b.WriteString("\n\n")
+	b.WriteString(fmt.Sprintf("%s  %s\n", labelStyle.Render("Hash    "), valueStyle.Render(c.Hash[:12])))
+	b.WriteString(fmt.Sprintf("%s  %s\n", labelStyle.Render("Author  "), valueStyle.Render(c.Author)))
+	b.WriteString(fmt.Sprintf("%s  %s\n", labelStyle.Render("Date    "), valueStyle.Render(c.Timestamp.Format("02 Jan 2006 15:04"))))
+	b.WriteString(fmt.Sprintf("%s  %s\n", labelStyle.Render("Message "), valueStyle.Render(c.MessageHead)))
+
+	// Changed files
+	b.WriteString("\n")
+	b.WriteString(sectionColor.Render(" Files "))
+	b.WriteString("\n\n")
+
+	if len(m.changes) == 0 {
+		b.WriteString(mutedStyle.Render("  No files changed"))
+	} else {
+		for _, fc := range m.changes {
+			badge, style := changeBadge(fc.Status)
+			b.WriteString(fmt.Sprintf("  %s  %s\n", style.Render(badge), textStyle.Render(fc.Path)))
+		}
+	}
+
+	return b.String()
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  STYLE HELPERS
+// ══════════════════════════════════════════════════════════════════════
+
+var (
+	sectionColor = lipgloss.NewStyle().Foreground(ghBlue).Bold(true)
+	branchActive = lipgloss.NewStyle().Foreground(ghBlue).Bold(true)
+	activeDot    = lipgloss.NewStyle().Foreground(ghBlue).Bold(true)
+	textStyle    = lipgloss.NewStyle().Foreground(ghText)
+	mutedStyle   = lipgloss.NewStyle().Foreground(ghMuted)
+	dimStyle     = lipgloss.NewStyle().Foreground(ghDim)
+	hashStyle    = lipgloss.NewStyle().Foreground(ghMuted)
+	labelStyle   = lipgloss.NewStyle().Foreground(ghMuted)
+	valueStyle   = lipgloss.NewStyle().Foreground(ghText)
+	selBgStyle   = lipgloss.NewStyle().Background(ghSelBg)
+)
+
+func changeBadge(status types.FileStatus) (string, lipgloss.Style) {
+	switch status {
+	case types.FileStatusModified:
+		return "M", lipgloss.NewStyle().Foreground(ghYellow).Bold(true)
+	case types.FileStatusAdded:
+		return "A", lipgloss.NewStyle().Foreground(ghGreen).Bold(true)
+	case types.FileStatusDeleted:
+		return "D", lipgloss.NewStyle().Foreground(ghRed).Bold(true)
+	case types.FileStatusUntracked:
+		return "?", lipgloss.NewStyle().Foreground(ghMuted)
+	default:
+		return " ", lipgloss.NewStyle().Foreground(ghDim)
+	}
 }
