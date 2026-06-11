@@ -1,21 +1,28 @@
-.PHONY: dev build test lint clean tidy
+.PHONY: dev build test lint clean tidy install help
 
-# Nome do binário
 BINARY := github-desktop-tui
-
-# Diretório de saída
 DIST_DIR := dist
-
-# Flags de build
 LDFLAGS := -ldflags="-s -w"
 
-## dev: Executa o programa em modo desenvolvimento
+## dev: Executa o aplicativo desktop em modo desenvolvimento
 dev:
 	go run ./cmd/$(BINARY)
 
 ## build: Compila o binário para produção
 build:
 	go build $(LDFLAGS) -o $(DIST_DIR)/$(BINARY) ./cmd/$(BINARY)
+
+## build-linux: Compila para Linux (AppImage-style)
+build-linux:
+	go build $(LDFLAGS) -o $(DIST_DIR)/$(BINARY)-linux-amd64 ./cmd/$(BINARY)
+
+## build-mac: Compila para macOS (cross-compile)
+build-mac:
+	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o $(DIST_DIR)/$(BINARY)-darwin-amd64 ./cmd/$(BINARY)
+
+## build-win: Compila para Windows (cross-compile)
+build-win:
+	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o $(DIST_DIR)/$(BINARY)-windows-amd64.exe ./cmd/$(BINARY)
 
 ## test: Executa todos os testes
 test:
