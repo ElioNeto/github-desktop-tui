@@ -107,27 +107,23 @@ func NewToolbar(state *AppState, onRefresh func()) fyne.CanvasObject {
 	})
 
 	// Build toolbar layout
-	toolbarContent := container.NewBorder(
-		nil, nil,
-		// Left: title + branch
-		container.NewHBox(
-			title,
-			widget.NewLabel("  "),
-			branchLabel,
-			widget.NewLabel("  "),
-			branchSelect,
-		),
-		// Right: actions
-		container.NewHBox(
-			search,
-			widget.NewLabel("  "),
-			commitBtn,
-			pushBtn,
-			pullBtn,
-			refreshBtn,
-		),
-		nil, nil,
+	// Fyne NewBorder(top, bottom, left, right)
+	leftBox := container.NewHBox(
+		title,
+		widget.NewLabel("  "),
+		branchLabel,
+		widget.NewLabel("  "),
+		branchSelect,
 	)
+	rightBox := container.NewHBox(
+		search,
+		widget.NewLabel("  "),
+		commitBtn,
+		pushBtn,
+		pullBtn,
+		refreshBtn,
+	)
+	toolbarContent := container.NewBorder(nil, nil, leftBox, rightBox)
 
 	// Orange background bar
 	bg := canvas.NewRectangle(color.RGBA{239, 108, 0, 255})
