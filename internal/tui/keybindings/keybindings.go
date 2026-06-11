@@ -50,6 +50,9 @@ type KeyMap struct {
 	MergeBranch  key.Binding
 	RenameBranch key.Binding
 
+	// F2.6 - File tree explorer
+	FileTreeToggle key.Binding
+
 	// F2.5 - Cherry-pick / Revert
 	CherryPick key.Binding
 	Revert     key.Binding
@@ -207,6 +210,12 @@ func DefaultKeyMap() KeyMap {
 		RenameBranch: key.NewBinding(
 			key.WithKeys("R"),
 			key.WithHelp("R", "renomear branch"),
+		),
+
+		// F2.6 - File tree explorer
+		FileTreeToggle: key.NewBinding(
+			key.WithKeys("t"),
+			key.WithHelp("t", "árvore de arquivos"),
 		),
 
 		// F2.5 - Cherry-pick / Revert

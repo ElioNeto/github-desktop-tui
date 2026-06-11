@@ -103,6 +103,9 @@ type Model struct {
 	currentThemeIdx  int
 	themeDir         string
 
+	// F2: File Tree Explorer
+	fileTree *FileTree
+
 	commitInput textinput.Model
 	authInput   textinput.Model
 	authProvider string
@@ -211,6 +214,7 @@ func New(opts Options) *Model {
 		availableThemes:     availThemes,
 		currentThemeIdx:     themeIdx,
 		themeDir:            opts.ThemeDir,
+		fileTree:            NewFileTree(opts.GitOps.Root(), opts.GitOps),
 	}
 }
 
@@ -618,6 +622,23 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.showTimeline = !m.showTimeline
 		if m.showTimeline {
 			return m, m.loadTimeline()
+		}
+		return m, nil
+
+	// F2.6: File tree explorer
+	case key.Matches(msg, m.keys.FileTreeToggle):
+		if m.rightView == ViewFileTree {
+			m.rightView = ViewDetails
+		} else {
+			m.rightView = ViewFileTree
+		}
+		if m.rightView == ViewFileTree {
+			return m, func() tea.Msg {
+				if err := m.fileTree.Load(); err != nil {
+					return ErrorMsg{Err: err}
+				}
+				return SuccessMsg{Message: "Árvore de arquivos carregada"}
+			}
 		}
 		return m, nil
 
@@ -1112,6 +1133,10 @@ func (m Model) executeRevert(hash string) tea.Cmd {
 // ---------------------------------------------------------------------------
 
 func (m Model) handleEnter() (tea.Model, tea.Cmd) {
+	if m.rightView == ViewFileTree && m.focused == PanelRight {
+		m.fileTree.ToggleExpand()
+		return m, nil
+	}
 	if m.showStaging {
 		hasStaged := false
 		for _, v := range m.stagingSelected {
@@ -1161,6 +1186,8 @@ func (m Model) handleUp() (tea.Model, tea.Cmd) {
 		m.selectedFile--
 	case m.showTimeline && m.timelineIndex > 0:
 		m.timelineIndex--
+	case m.rightView == ViewFileTree && m.focused == PanelRight:
+		m.fileTree.CursorUp()
 	case m.centerView == ViewCommitLog:
 		idx := m.store.Commits.SelectedIndex()
 		if idx > 0 {
@@ -1176,6 +1203,8 @@ func (m Model) handleDown() (tea.Model, tea.Cmd) {
 		m.selectedFile++
 	case m.showTimeline && m.timelineIndex < len(m.timelineCommits)-1:
 		m.timelineIndex++
+	case m.rightView == ViewFileTree && m.focused == PanelRight:
+		m.fileTree.CursorDown()
 	case m.centerView == ViewCommitLog:
 		idx := m.store.Commits.SelectedIndex()
 		if idx < len(m.store.Commits.Commits())-1 {
@@ -1247,7 +1276,19 @@ func (m Model) handleDiff() (tea.Model, tea.Cmd) {
 // ---------------------------------------------------------------------------
 
 func (m Model) refreshAll() tea.Cmd {
-	return tea.Batch(m.loadGitStatus(), m.loadCommits, m.loadBranches(), m.loadTimeline(), m.loadRemotes())
+	return tea.Batch(
+		m.loadGitStatus(),
+		m.loadCommits,
+		m.loadBranches(),
+		m.loadTimeline(),
+		m.loadRemotes(),
+		func() tea.Msg {
+			if err := m.fileTree.Load(); err != nil {
+				return ErrorMsg{Err: err}
+			}
+			return nil
+		},
+	)
 }
 
 func (m Model) loadCommits() tea.Msg {
@@ -1586,7 +1627,7 @@ func (m Model) renderLeftPanel() string {
 		{"c", "commit"}, {"s", "stage"}, {"p", "push"}, {"l", "pull"},
 		{"b", "branch"}, {"/", "timeline"}, {"P", "auth"}, {"r", "refresh"},
 		{"a", "add repo"}, {"A", "scan repos"}, {"x", "remove"}, {"f", "fav"},
-		{"1-3", "panels"}, {"T", "theme"}, {"N", "history"},
+		{"t", "file tree"}, {"1-3", "panels"}, {"T", "theme"}, {"N", "history"},
 	}
 	for _, kv := range keys {
 		b.WriteString(fmt.Sprintf("  %s  %s\n",
@@ -1717,6 +1758,11 @@ func (m Model) renderBranchList() string {
 }
 
 func (m Model) renderRightPanel() string {
+	// F2.6: File Tree Explorer view
+	if m.rightView == ViewFileTree {
+		return m.fileTree.Render(m.layout.RightWidth, m.layout.PanelHeight, m.theme)
+	}
+
 	var b strings.Builder
 
 	// Git status summary
@@ -1922,6 +1968,7 @@ func (m Model) renderCommandBar() string {
 			{"d", "diff"},
 			{"y", "cherry-pick"},
 			{"V", "revert"},
+			{"t", "file tree"},
 			{"/", "timeline"},
 			{"P", "auth"},
 			{"C", "branch"},
@@ -2394,6 +2441,7 @@ func (m Model) renderHelpOverlay() string {
 		{m.keys.RepoScan.Help().Key, m.keys.RepoScan.Help().Desc},
 		{m.keys.RepoRemove.Help().Key, m.keys.RepoRemove.Help().Desc},
 		{m.keys.RepoFav.Help().Key, m.keys.RepoFav.Help().Desc},
+		{m.keys.FileTreeToggle.Help().Key, m.keys.FileTreeToggle.Help().Desc},
 	}
 	for _, kv := range keys {
 		inner.WriteString(fmt.Sprintf("  %s  %s\n",
