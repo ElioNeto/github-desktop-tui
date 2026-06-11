@@ -228,15 +228,15 @@ func (ft *FileTree) Render(width, height int, th *theme.Theme) string {
 	var b strings.Builder
 
 	if !ft.loaded || len(ft.nodes) == 0 {
-		return th.DimmedStyle.Render("  (t: carregar árvore)")
+		return th.BaseMuted.Render("  (t: carregar árvore)")
 	}
 
 	// Header
-	b.WriteString(th.FocusedStyle.Render(" Files "))
+	b.WriteString(th.Accented.Render(" Files "))
 	b.WriteString("\n")
 
 	// Separator
-	b.WriteString(th.DimmedStyle.Render(strings.Repeat("─", width)))
+	b.WriteString(th.BaseMuted.Render(strings.Repeat("─", width)))
 	b.WriteString("\n")
 
 	// Calculate visible range
@@ -272,24 +272,24 @@ func (ft *FileTree) Render(width, height int, th *theme.Theme) string {
 
 		// Status indicator
 		statusStr := ""
-		statusStyle := th.BaseStyle
+		statusStyle := th.Base
 		if node.HasChanges {
 			switch node.Status {
 			case types.FileStatusModified:
-				statusStr = th.StatusModified.Render("M")
-				statusStyle = th.StatusModified
+				statusStr = th.BadgeModified.Render("M")
+				statusStyle = th.BadgeModified
 			case types.FileStatusAdded:
-				statusStr = th.StatusAdded.Render("A")
-				statusStyle = th.StatusAdded
+				statusStr = th.BadgeAdded.Render("A")
+				statusStyle = th.BadgeAdded
 			case types.FileStatusDeleted:
-				statusStr = th.StatusDeleted.Render("D")
-				statusStyle = th.StatusDeleted
+				statusStr = th.BadgeDeleted.Render("D")
+				statusStyle = th.BadgeDeleted
 			case types.FileStatusUntracked:
-				statusStr = th.StatusUntracked.Render("?")
-				statusStyle = th.StatusUntracked
+				statusStr = th.BaseMuted.Render("?")
+				statusStyle = th.BaseMuted
 			default:
 				// Propagated from children
-				statusStr = th.DimmedStyle.Render("~")
+				statusStr = th.BaseMuted.Render("~")
 			}
 		} else if node.IsDir {
 			statusStr = " "
@@ -301,8 +301,8 @@ func (ft *FileTree) Render(width, height int, th *theme.Theme) string {
 		cursor := " "
 		style := statusStyle
 		if i == ft.cursor {
-			cursor = th.FocusedStyle.Render("▸")
-			style = th.SelectedStyle
+			cursor = th.Accented.Render("▸")
+			style = th.Selected
 		}
 
 		// Truncate name if too long
@@ -331,7 +331,7 @@ func (ft *FileTree) Render(width, height int, th *theme.Theme) string {
 	// Scroll indicator
 	if len(ft.nodes) > maxNodes {
 		b.WriteString("\n")
-		b.WriteString(th.ScrollIndicator.Render(
+		b.WriteString(th.Dim.Render(
 			fmt.Sprintf("  ↓ %d/%d  ↑↓: nav  ↵: expandir", end, len(ft.nodes))))
 	}
 

@@ -59,13 +59,12 @@ func Run() error {
 	var th *theme.Theme
 	if cfg.ThemeName != "" {
 		th = theme.BuiltinTheme(cfg.ThemeName)
-		// Try loading from theme dir
 		themePath := filepath.Join(themeDir, cfg.ThemeName+".json")
 		if loaded, err := theme.Load(themePath); err == nil {
 			th = loaded
 		}
 	} else {
-		th = theme.Default()
+		th = theme.NewDefault()
 		if loaded, err := theme.Load(cfg.ThemeFile); err == nil {
 			th = loaded
 		}
