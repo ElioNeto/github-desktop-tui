@@ -465,35 +465,62 @@ make clean        # rm -rf dist/
 
 ## Roadmap (Fases)
 
-### Fase 1 — Fundação (agora)
+### Fase 1 — Fundação ✅
 - [x] Configuração do projeto (Go modules, Makefile)
 - [x] Arquitetura documentada
-- [ ] Entry point funcional
-- [ ] TUI com layout de 3 painéis
-- [ ] Store central de estado
-- [ ] Sistema de tema
-- [ ] Provedor GitHub (autenticação + listar repos)
-- [ ] Status bar
-- [ ] Navegação entre painéis
+- [x] Entry point funcional
+- [x] TUI com layout de 3 painéis
+- [x] Store central de estado
+- [x] Sistema de tema
+- [x] Provedor GitHub (autenticação + listar repos)
+- [x] Status bar
+- [x] Navegação entre painéis
 
-### Fase 2 — Git Local
-- [ ] Git operations wrapper (status, add, commit, push, pull)
-- [ ] Commit log view
-- [ ] Diff viewer
-- [ ] Branch management
-- [ ] File tree explorer
+### Fase 2 — Git Local ✅
+- [x] Git operations wrapper (status, add, commit, push, pull)
+- [x] Commit log view com visual graph
+- [x] Diff viewer com scroll e syntax highlighting
+- [x] Branch management (criar, deletar, merge, renomear)
+- [x] File tree explorer
+- [x] Cherry-pick e revert de commits
+
+**Issues F2 abertas:**
+- [#21](https://github.com/ElioNeto/github-desktop-tui/issues/21) F2.6: Stash management (save, apply, pop, drop)
+- [#22](https://github.com/ElioNeto/github-desktop-tui/issues/22) F2.7: Blame view — line-by-line annotation
+- [#23](https://github.com/ElioNeto/github-desktop-tui/issues/23) F2.8: Line-by-line staging e discarding
+- [#24](https://github.com/ElioNeto/github-desktop-tui/issues/24) F2.9: Commit signing com PGP e SSH keys
+- [#25](https://github.com/ElioNeto/github-desktop-tui/issues/25) F2.10: Detach HEAD e undo/redo actions
+- [#26](https://github.com/ElioNeto/github-desktop-tui/issues/26) F2.11: Delete remote branches
+- [#27](https://github.com/ElioNeto/github-desktop-tui/issues/27) F2.12: Multi-line commit messages
+- [#28](https://github.com/ElioNeto/github-desktop-tui/issues/28) F2.13: Search/find dentro de diff e blame
+- [#7](https://github.com/ElioNeto/github-desktop-tui/issues/7) F2.3: Resolução de conflitos de merge
+- [#8](https://github.com/ElioNeto/github-desktop-tui/issues/8) F2.4: Rebase interativo
 
 ### Fase 3 — Multi-Provedor
-- [ ] GitLab provider
-- [ ] Bitbucket provider
-- [ ] Gitea/Forgejo provider
-- [ ] Provider switching
-- [ ] OAuth flow (device code)
+- [ ] GitLab provider ([#11](https://github.com/ElioNeto/github-desktop-tui/issues/11))
+- [ ] Bitbucket provider ([#12](https://github.com/ElioNeto/github-desktop-tui/issues/12))
+- [ ] Gitea/Forgejo provider ([#13](https://github.com/ElioNeto/github-desktop-tui/issues/13))
+- [ ] Provider switching dinâmico ([#14](https://github.com/ElioNeto/github-desktop-tui/issues/14))
+- [ ] OAuth flow (device code) ([#10](https://github.com/ElioNeto/github-desktop-tui/issues/10))
+- [ ] Pull Requests / Merge Requests view ([#30](https://github.com/ElioNeto/github-desktop-tui/issues/30))
+- [ ] Painéis redimensionáveis com drag ([#29](https://github.com/ElioNeto/github-desktop-tui/issues/29))
+
+### Fase 3.5 — Glint Feature Parity
+- [ ] Stash management ([#21](https://github.com/ElioNeto/github-desktop-tui/issues/21))
+- [ ] Blame view ([#22](https://github.com/ElioNeto/github-desktop-tui/issues/22))
+- [ ] Commit signing ([#24](https://github.com/ElioNeto/github-desktop-tui/issues/24))
+- [ ] Detach HEAD + undo/redo ([#25](https://github.com/ElioNeto/github-desktop-tui/issues/25))
+- [ ] Delete remote branches ([#26](https://github.com/ElioNeto/github-desktop-tui/issues/26))
+- [ ] Multi-line commit messages ([#27](https://github.com/ElioNeto/github-desktop-tui/issues/27))
+- [ ] Context menu ([#32](https://github.com/ElioNeto/github-desktop-tui/issues/32))
 
 ### Fase 4 — Polimento
-- [ ] Search/filter
+- [ ] Global search/filter ([#15](https://github.com/ElioNeto/github-desktop-tui/issues/15))
 - [ ] Help overlay
-- [ ] Temas customizáveis
-- [ ] Performance optimization
-- [ ] Testes E2E no terminal
-- [ ] Documentação de usuário
+- [ ] Custom themes ([#4](https://github.com/ElioNeto/github-desktop-tui/issues/4) — closed)
+- [ ] Font size e UI customization ([#31](https://github.com/ElioNeto/github-desktop-tui/issues/31))
+- [ ] Performance optimization ([#16](https://github.com/ElioNeto/github-desktop-tui/issues/16))
+- [ ] E2E tests in terminal ([#17](https://github.com/ElioNeto/github-desktop-tui/issues/17))
+- [ ] Custom keybindings ([#18](https://github.com/ElioNeto/github-desktop-tui/issues/18))
+- [ ] i18n PT/BR + EN ([#19](https://github.com/ElioNeto/github-desktop-tui/issues/19))
+- [ ] Plugin system via MCP ([#20](https://github.com/ElioNeto/github-desktop-tui/issues/20))
