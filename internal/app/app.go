@@ -1,15 +1,27 @@
 package app
 
 import (
-	"github.com/nicoddemus/github-desktop-tui/internal/config"
-	"github.com/nicoddemus/github-desktop-tui/internal/desktop"
+	"fmt"
+	"os"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	gitlocal "github.com/nicoddemus/github-desktop-tui/internal/git"
+	"github.com/nicoddemus/github-desktop-tui/internal/store"
+	"github.com/nicoddemus/github-desktop-tui/internal/tui"
 )
 
-// Run starts the desktop application.
+// Run starts the TUI application.
 func Run() error {
-	cfg, err := config.Load()
-	if err != nil {
-		return err
+	gitOps := gitlocal.New(".")
+	st := store.New()
+
+	p := tea.NewProgram(tui.New(gitOps, st), tea.WithAltScreen())
+	if _, err := p.Run(); err != nil {
+		return fmt.Errorf("TUI error: %w", err)
 	}
-	return desktop.Run(cfg)
+	return nil
 }
+
+// Keep os import used
+var _ = os.DevNull
