@@ -276,14 +276,14 @@ func (ft *FileTree) Render(width, height int, th *theme.Theme) string {
 		if node.HasChanges {
 			switch node.Status {
 			case types.FileStatusModified:
-				statusStr = th.BadgeModified.Render("M")
-				statusStyle = th.BadgeModified
+				statusStr = th.BadgeMod.Render("M")
+				statusStyle = th.BadgeMod
 			case types.FileStatusAdded:
-				statusStr = th.BadgeAdded.Render("A")
-				statusStyle = th.BadgeAdded
+				statusStr = th.BadgeAdd.Render("A")
+				statusStyle = th.BadgeAdd
 			case types.FileStatusDeleted:
-				statusStr = th.BadgeDeleted.Render("D")
-				statusStyle = th.BadgeDeleted
+				statusStr = th.BadgeDel.Render("D")
+				statusStyle = th.BadgeDel
 			case types.FileStatusUntracked:
 				statusStr = th.BaseMuted.Render("?")
 				statusStyle = th.BaseMuted
@@ -331,7 +331,7 @@ func (ft *FileTree) Render(width, height int, th *theme.Theme) string {
 	// Scroll indicator
 	if len(ft.nodes) > maxNodes {
 		b.WriteString("\n")
-		b.WriteString(th.Dim.Render(
+		b.WriteString(th.DimStyle.Render(
 			fmt.Sprintf("  ↓ %d/%d  ↑↓: nav  ↵: expandir", end, len(ft.nodes))))
 	}
 

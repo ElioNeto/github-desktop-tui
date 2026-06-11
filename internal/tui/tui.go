@@ -1502,55 +1502,40 @@ func (m Model) View() string {
 
 	var b strings.Builder
 
-	// ── Toolbar (top bar with repo info, actions, search) ──
+	// ── Toolbar (accent background, full width) ──
 	b.WriteString(m.renderToolbar())
 	b.WriteString("\n")
 
-	// ── Three-panel layout with borders ──
-	// Each panel is rendered inside a NormalBorder box.
-	// We render content for each panel, then wrap in bordered style.
+	// ── Three-panel layout — terminal-native: no borders ──
+	// Panels are separated by thin vertical line: ┃
+	// Active panel separator turns orange
+	sepNorm := m.theme.BaseMuted.Render("┃")
+	sepAct := m.theme.Accented.Render("┃")
 
-	// Determine which border style to use per panel
-	leftBorder := m.theme.PanelBorder
-	centerBorder := m.theme.PanelBorder
-	rightBorder := m.theme.PanelBorder
-	if m.focused == PanelLeft {
-		leftBorder = m.theme.ActiveBorder
-	} else if m.focused == PanelCenter {
-		centerBorder = m.theme.ActiveBorder
-	} else if m.focused == PanelRight {
-		rightBorder = m.theme.ActiveBorder
-	}
-
-	// Render each panel's content
 	leftContent := m.renderLeftPanel()
 	centerContent := m.renderCenterPanel()
 	rightContent := m.renderRightPanel()
 
-	// The bordered style adds 1 line top/bottom and 1 char left/right.
-	// So the inner content height = PanelHeight - 2 (top/bottom border)
-	// and inner width = panelWidth - 2 (left/right border).
-	innerHeight := m.layout.PanelHeight - 2
-	if innerHeight < 1 {
-		innerHeight = 1
+	// Choose separator based on focused panel
+	sepL, sepR := sepNorm, sepNorm
+	if m.focused == PanelLeft {
+		sepL = sepAct
+	} else if m.focused == PanelCenter {
+		sepL = sepAct
+		sepR = sepAct
+	} else if m.focused == PanelRight {
+		sepR = sepAct
 	}
 
-	// Wrap each content in its bordered style at correct width
-	leftWrapped := leftBorder.Width(m.layout.LeftWidth).Render(
-		m.padContentLines(leftContent, m.layout.ContentWidth(PanelLeft), innerHeight))
-	centerWrapped := centerBorder.Width(m.layout.CenterWidth).Render(
-		m.padContentLines(centerContent, m.layout.ContentWidth(PanelCenter), innerHeight))
-	rightWrapped := rightBorder.Width(m.layout.RightWidth).Render(
-		m.padContentLines(rightContent, m.layout.ContentWidth(PanelRight), innerHeight))
-
-	// Combine panels horizontally line by line
-	// Each bordered panel has PanelHeight lines (top border + content + bottom border)
+	// Write panels line by line
 	for line := 0; line < m.layout.PanelHeight; line++ {
-		leftLine := getLine(leftWrapped, line, m.layout.LeftWidth)
-		centerLine := getLine(centerWrapped, line, m.layout.CenterWidth)
-		rightLine := getLine(rightWrapped, line, m.layout.RightWidth)
+		leftLine := getLine(leftContent, line, m.layout.LeftWidth)
+		centerLine := getLine(centerContent, line, m.layout.CenterWidth)
+		rightLine := getLine(rightContent, line, m.layout.RightWidth)
 		b.WriteString(leftLine)
+		b.WriteString(sepL)
 		b.WriteString(centerLine)
+		b.WriteString(sepR)
 		b.WriteString(rightLine)
 		b.WriteString("\n")
 	}
@@ -1558,7 +1543,14 @@ func (m Model) View() string {
 	// ── Status bar ──
 	b.WriteString(m.renderStatusBar())
 
-	// ── Overlays ──
+	// ── Overlays (unchanged) ──
+	m.writeOverlays(&b)
+
+	return b.String()
+}
+
+// writeOverlays writes all active overlays to the string builder.
+func (m Model) writeOverlays(b *strings.Builder) {
 	if m.showHelp {
 		b.WriteString("\n" + m.renderHelpOverlay())
 	}
@@ -1598,32 +1590,6 @@ func (m Model) View() string {
 	if m.notification != nil && time.Since(m.notifTimer) < 4*time.Second {
 		b.WriteString("\n" + m.renderNotification())
 	}
-
-	return b.String()
-}
-
-// padContentLines pads content to exactly n lines of width w.
-func (m Model) padContentLines(content string, width, height int) string {
-	lines := strings.Split(content, "\n")
-	var out strings.Builder
-	for i := 0; i < height; i++ {
-		if i < len(lines) {
-			line := lines[i]
-			if len(line) > width {
-				line = line[:width]
-			}
-			out.WriteString(line)
-			if pad := width - len(line); pad > 0 {
-				out.WriteString(strings.Repeat(" ", pad))
-			}
-		} else {
-			out.WriteString(strings.Repeat(" ", width))
-		}
-		if i < height-1 {
-			out.WriteString("\n")
-		}
-	}
-	return out.String()
 }
 
 // ---------------------------------------------------------------------------
@@ -1644,7 +1610,7 @@ func (m Model) renderToolbar() string {
 	left.WriteString(m.theme.Accented.Render(" ◉ "))
 	left.WriteString(m.theme.Base.Render(repoName))
 	left.WriteString(m.theme.BaseMuted.Render("  ⎇ "))
-	left.WriteString(m.theme.BranchLabel.Render(branch))
+	left.WriteString(m.theme.Branch.Render(branch))
 
 	// Right: actions + search + config
 	var right strings.Builder
@@ -1661,7 +1627,7 @@ func (m Model) renderToolbar() string {
 		avail = 1
 	}
 	spaces := strings.Repeat(" ", avail)
-	return m.theme.ToolbarStyle.Render(left.String() + spaces + right.String())
+	return m.theme.Toolbar.Render(left.String() + spaces + right.String())
 }
 
 // ---------------------------------------------------------------------------
@@ -1675,7 +1641,7 @@ func (m Model) renderSectionHeader(title string) string {
 
 func (m Model) renderLeftPanel() string {
 	var b strings.Builder
-	w := m.layout.ContentWidth(PanelLeft)
+	w := m.layout.LeftWidth
 
 	b.WriteString(m.renderSectionHeader("Branches"))
 	b.WriteString("\n")
@@ -1796,7 +1762,7 @@ func (m Model) renderCenterPanel() string {
 
 func (m Model) renderCommitLog() string {
 	var b strings.Builder
-	w := m.layout.ContentWidth(PanelCenter)
+	w := m.layout.CenterWidth
 
 	// Branch header with active branch badge
 	activeBranch := m.store.Branches.Active()
@@ -1877,7 +1843,7 @@ func (m Model) renderCommitLog() string {
 					if ref == "HEAD" {
 						continue
 					}
-					label := m.theme.BranchLabel.Render(" " + ref + " ")
+					label := m.theme.Branch.Render(" " + ref + " ")
 					// Only show if we have space
 					if len(rowStr)+len(ref)+4 < w {
 						rowStr += " " + label
@@ -1992,7 +1958,7 @@ func (m Model) renderRightPanel() string {
 	}
 
 	var b strings.Builder
-	w := m.layout.ContentWidth(PanelRight)
+	w := m.layout.RightWidth
 
 	// ── Commit Details (the main purpose of the right panel) ──
 	selCommit := m.store.Commits.Selected()
@@ -2051,7 +2017,7 @@ func (m Model) renderRightPanel() string {
 		}
 		summary := ""
 		if staged > 0 {
-			summary += m.theme.BadgeAdded.Render(fmt.Sprintf(" %d staged", staged))
+			summary += m.theme.BadgeAdd.Render(fmt.Sprintf(" %d staged", staged))
 		}
 		unstaged := len(changes) - staged
 		if unstaged > 0 {
@@ -2073,11 +2039,11 @@ func (m Model) renderRightPanel() string {
 			badge := m.theme.BaseMuted.Render(" ")
 			switch fc.Status {
 			case types.FileStatusModified:
-				badge = m.theme.BadgeModified.Render("M")
+				badge = m.theme.BadgeMod.Render("M")
 			case types.FileStatusAdded:
-				badge = m.theme.BadgeAdded.Render("A")
+				badge = m.theme.BadgeAdd.Render("A")
 			case types.FileStatusDeleted:
-				badge = m.theme.BadgeDeleted.Render("D")
+				badge = m.theme.BadgeDel.Render("D")
 			case types.FileStatusUntracked:
 				badge = m.theme.BaseMuted.Render("?")
 			}
@@ -2125,9 +2091,9 @@ func (m Model) renderStatusBar() string {
 		}
 	}
 
-	left := fmt.Sprintf(" %s", m.theme.BranchLabel.Render(branch))
+	left := fmt.Sprintf(" %s", m.theme.Branch.Render(branch))
 	if staged > 0 {
-		left += m.theme.BadgeAdded.Render(fmt.Sprintf(" +%d", staged))
+		left += m.theme.BadgeAdd.Render(fmt.Sprintf(" +%d", staged))
 	}
 	if changes-staged > 0 {
 		left += m.theme.BaseMuted.Render(fmt.Sprintf(" ~%d", changes-staged))
@@ -2140,7 +2106,7 @@ func (m Model) renderStatusBar() string {
 	right := ""
 	for _, p := range m.registry.All() {
 		if m.authManager.IsAuthenticated(p.Name()) {
-			right += m.theme.BadgeAdded.Render(" ✓")
+			right += m.theme.BadgeAdd.Render(" ✓")
 			break
 		}
 	}
@@ -2150,7 +2116,7 @@ func (m Model) renderStatusBar() string {
 	if spaces < 1 {
 		spaces = 1
 	}
-	return m.theme.StatusStyle.Render(left + strings.Repeat(" ", spaces) + right)
+	return m.theme.Status.Render(left + strings.Repeat(" ", spaces) + right)
 }
 
 func (m Model) renderCommandBar() string {
@@ -2227,11 +2193,11 @@ func (m Model) renderDiffViewerOverlay() string {
 		if len(line) > 0 {
 			switch line[0] {
 			case '+':
-				lineStyle = m.theme.BadgeAdded
+				lineStyle = m.theme.BadgeAdd
 			case '-':
-				lineStyle = m.theme.BadgeDeleted
+				lineStyle = m.theme.BadgeDel
 			case '@':
-				lineStyle = m.theme.BadgeAdded
+				lineStyle = m.theme.BadgeAdd
 			case 'd':
 				if strings.HasPrefix(line, "diff --git") {
 					lineStyle = m.theme.Accented
@@ -2325,7 +2291,7 @@ func (m Model) renderStagingOverlay() string {
 
 			check := "[ ]"
 			if sel {
-				check = m.theme.BadgeAdded.Render("[✓]")
+				check = m.theme.BadgeAdd.Render("[✓]")
 			} else {
 				check = m.theme.BaseMuted.Render("[ ]")
 			}
@@ -2334,11 +2300,11 @@ func (m Model) renderStagingOverlay() string {
 			var statusStyle lipgloss.Style
 			switch fc.Status {
 			case types.FileStatusModified:
-				statusStyle = m.theme.BadgeModified
+				statusStyle = m.theme.BadgeMod
 			case types.FileStatusAdded:
-				statusStyle = m.theme.BadgeAdded
+				statusStyle = m.theme.BadgeAdd
 			case types.FileStatusDeleted:
-				statusStyle = m.theme.BadgeDeleted
+				statusStyle = m.theme.BadgeDel
 			case types.FileStatusUntracked:
 				statusStyle = m.theme.BaseMuted
 			case types.FileStatusRenamed:
@@ -2367,7 +2333,7 @@ func (m Model) renderStagingOverlay() string {
 
 		if len(m.fileChanges) > maxVisible {
 			inner.WriteString("\n")
-			inner.WriteString(m.theme.Dim.Render(
+			inner.WriteString(m.theme.DimStyle.Render(
 				fmt.Sprintf("  ↓ %d de %d", end, len(m.fileChanges))))
 		}
 	}
@@ -2465,7 +2431,7 @@ func (m Model) renderRemotesOverlay() string {
 					url = url[:40] + "…"
 				}
 			}
-			line := fmt.Sprintf("  %s → %s", m.theme.BranchLabel.Render(r.Name), url)
+			line := fmt.Sprintf("  %s → %s", m.theme.Branch.Render(r.Name), url)
 			inner.WriteString(line + "\n")
 		}
 	}
@@ -2492,7 +2458,7 @@ func (m Model) renderAuthOverlay() string {
 	for _, p := range m.registry.All() {
 		dot := m.theme.BaseMuted.Render("○")
 		if m.authManager.IsAuthenticated(p.Name()) {
-			dot = m.theme.BadgeAdded.Render("●")
+			dot = m.theme.BadgeAdd.Render("●")
 		}
 		method := ""
 		if m.authManager.HasTokenConfig(p.Name()) {

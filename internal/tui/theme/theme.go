@@ -8,46 +8,41 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Theme defines a dark professional desktop Git app style.
+// Theme defines a dark professional desktop Git app style — terminal-native.
 type Theme struct {
 	// Core
 	Background lipgloss.Color
-	Surface    lipgloss.Color // panel backgrounds
-	SurfaceAlt lipgloss.Color // alternate (e.g. selected row)
-	Border     lipgloss.Color // panel borders
+	Surface    lipgloss.Color
+	SurfaceAlt lipgloss.Color
+	Border     lipgloss.Color
 	Text       lipgloss.Color
 	Muted      lipgloss.Color
-	DimText    lipgloss.Color
+	Dim        lipgloss.Color
 
 	// Accents
-	Orange    lipgloss.Color
-	Blue      lipgloss.Color
-	Green     lipgloss.Color
-	Red       lipgloss.Color
-	Yellow    lipgloss.Color
-	Purple    lipgloss.Color
-	Cyan      lipgloss.Color
+	Orange lipgloss.Color
+	Blue   lipgloss.Color
+	Green  lipgloss.Color
+	Red    lipgloss.Color
+	Yellow lipgloss.Color
 
 	// Computed styles
-	Base        lipgloss.Style
-	BaseMuted   lipgloss.Style
-	Dim         lipgloss.Style
-	Selected    lipgloss.Style
-	Accented    lipgloss.Style
-	PanelBorder lipgloss.Style
-	ActiveBorder lipgloss.Style
+	Base       lipgloss.Style
+	BaseMuted  lipgloss.Style
+	DimStyle   lipgloss.Style
+	Selected   lipgloss.Style
+	Accented   lipgloss.Style
 
-	ToolbarStyle lipgloss.Style
-	StatusStyle  lipgloss.Style
+	Toolbar    lipgloss.Style
+	Status     lipgloss.Style
 
-	BranchLabel  lipgloss.Style
-	TagLabel     lipgloss.Style
-	BadgeAdded   lipgloss.Style
-	BadgeDeleted lipgloss.Style
-	BadgeModified lipgloss.Style
+	Branch     lipgloss.Style
+	BadgeAdd   lipgloss.Style
+	BadgeDel   lipgloss.Style
+	BadgeMod   lipgloss.Style
 
-	OverlayBox  lipgloss.Style
-	OverlayTitle lipgloss.Style
+	OverlayBox    lipgloss.Style
+	OverlayTitle  lipgloss.Style
 
 	SuccessText lipgloss.Style
 	ErrorText   lipgloss.Style
@@ -58,79 +53,50 @@ type Theme struct {
 // NewDefault creates the dark professional theme.
 func NewDefault() *Theme {
 	t := &Theme{
-		Background: lipgloss.Color("#0d1117"), // GitHub dark bg
-		Surface:    lipgloss.Color("#161b22"), // panel bg
-		SurfaceAlt: lipgloss.Color("#1c2333"), // selected/hover
-		Border:     lipgloss.Color("#30363d"), // subtle border
+		Background: lipgloss.Color("#0d1117"),
+		Surface:    lipgloss.Color("#161b22"),
+		SurfaceAlt: lipgloss.Color("#1c2533"),
+		Border:     lipgloss.Color("#21262d"),
 		Text:       lipgloss.Color("#e6edf3"),
 		Muted:      lipgloss.Color("#8b949e"),
-		DimText:    lipgloss.Color("#484f58"),
+		Dim:        lipgloss.Color("#484f58"),
 
 		Orange: lipgloss.Color("#ef6c00"),
 		Blue:   lipgloss.Color("#58a6ff"),
 		Green:  lipgloss.Color("#3fb950"),
 		Red:    lipgloss.Color("#f85149"),
 		Yellow: lipgloss.Color("#d29922"),
-		Purple: lipgloss.Color("#bc8cff"),
-		Cyan:   lipgloss.Color("#39d2c0"),
 	}
 	t.initStyles()
 	return t
 }
 
-// BuiltinTheme returns a built-in theme.
-func BuiltinTheme(name string) *Theme {
-	return NewDefault()
-}
+func BuiltinTheme(name string) *Theme { return NewDefault() }
 
 func (t *Theme) initStyles() {
-	// Base text
 	t.Base = lipgloss.NewStyle().Foreground(t.Text).Background(t.Background)
 	t.BaseMuted = lipgloss.NewStyle().Foreground(t.Muted).Background(t.Background)
-	t.Dim = lipgloss.NewStyle().Foreground(t.DimText).Background(t.Background)
+	t.DimStyle = lipgloss.NewStyle().Foreground(t.Dim).Background(t.Background)
 	t.Selected = lipgloss.NewStyle().Foreground(t.Text).Background(t.SurfaceAlt)
 	t.Accented = lipgloss.NewStyle().Foreground(t.Orange).Bold(true)
 
-	// Panel borders
-	t.PanelBorder = lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
-		BorderForeground(t.Border).
-		Background(t.Surface).
+	// Toolbar: full width, accent bg, white text
+	t.Toolbar = lipgloss.NewStyle().
 		Foreground(t.Text).
+		Background(t.Orange).
 		Padding(0, 1)
 
-	t.ActiveBorder = lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
-		BorderForeground(t.Orange).
-		Background(t.Surface).
-		Foreground(t.Text).
-		Padding(0, 1)
-
-	// Toolbar
-	t.ToolbarStyle = lipgloss.NewStyle().
-		Background(t.Surface).
-		Foreground(t.Text).
-		Padding(0, 1)
-
-	// Status bar
-	t.StatusStyle = lipgloss.NewStyle().
-		Background(t.Surface).
+	// Status bar: muted bg
+	t.Status = lipgloss.NewStyle().
 		Foreground(t.Muted).
-		Padding(0, 2)
+		Background(t.Surface).
+		Padding(0, 1)
 
 	// Labels
-	t.BranchLabel = lipgloss.NewStyle().
-		Foreground(t.Orange).
-		Bold(true)
-
-	t.TagLabel = lipgloss.NewStyle().
-		Foreground(t.Yellow).
-		Bold(true)
-
-	// Badges
-	t.BadgeAdded = lipgloss.NewStyle().Foreground(t.Green).Bold(true)
-	t.BadgeDeleted = lipgloss.NewStyle().Foreground(t.Red).Bold(true)
-	t.BadgeModified = lipgloss.NewStyle().Foreground(t.Yellow).Bold(true)
+	t.Branch = lipgloss.NewStyle().Foreground(t.Orange).Bold(true)
+	t.BadgeAdd = lipgloss.NewStyle().Foreground(t.Green).Bold(true)
+	t.BadgeDel = lipgloss.NewStyle().Foreground(t.Red).Bold(true)
+	t.BadgeMod = lipgloss.NewStyle().Foreground(t.Yellow).Bold(true)
 
 	// Overlays
 	t.OverlayBox = lipgloss.NewStyle().
@@ -145,14 +111,12 @@ func (t *Theme) initStyles() {
 		Bold(true).
 		Padding(0, 2)
 
-	// Notifications
 	t.SuccessText = lipgloss.NewStyle().Foreground(t.Green).Bold(true)
 	t.ErrorText = lipgloss.NewStyle().Foreground(t.Red).Bold(true)
 	t.WarningText = lipgloss.NewStyle().Foreground(t.Yellow).Bold(true)
 	t.InfoText = lipgloss.NewStyle().Foreground(t.Blue).Bold(true)
 }
 
-// Load reads theme from JSON.
 func Load(path string) (*Theme, error) {
 	t := NewDefault()
 	data, err := os.ReadFile(filepath.Clean(path))
