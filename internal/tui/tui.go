@@ -14,22 +14,38 @@ import (
 )
 
 // ── GitHub Dark Mode Colors ──
+
 var (
+	// Base GitHub-like
 	ghBg       = lipgloss.Color("#0d1117")
 	ghSurface  = lipgloss.Color("#161b22")
+	ghSurface2 = lipgloss.Color("#21262d")
+
+	// Borders
 	ghBorder   = lipgloss.Color("#30363d")
-	ghBorderHi = lipgloss.Color("#58a6ff") // active border
-	ghText     = lipgloss.Color("#e6edf3")
-	ghMuted    = lipgloss.Color("#8b949e")
-	ghDim      = lipgloss.Color("#484f58")
-	ghBlue     = lipgloss.Color("#58a6ff")
-	ghGreen    = lipgloss.Color("#3fb950")
-	ghRed      = lipgloss.Color("#f85149")
-	ghYellow   = lipgloss.Color("#d29922")
-	ghOrange   = lipgloss.Color("#db6d28")
+	ghBorder2  = lipgloss.Color("#262c36")
+	ghBorderHi = lipgloss.Color("#a371f7") // foco ativo em roxo
+
+	// Text
+	ghText  = lipgloss.Color("#e6edf3")
+	ghMuted = lipgloss.Color("#8b949e")
+	ghDim   = lipgloss.Color("#6e7681")
+
+	// Primary accent = purple-first
 	ghPurple   = lipgloss.Color("#bc8cff")
-	ghCyan     = lipgloss.Color("#39d2c0")
-	ghSelBg    = lipgloss.Color("#1f2d47")
+	ghPurpleHi = lipgloss.Color("#a371f7")
+	ghPurpleBg = lipgloss.Color("#2b1f36")
+
+	// Supporting accents
+	ghBlue   = lipgloss.Color("#79c0ff")
+	ghGreen  = lipgloss.Color("#3fb950")
+	ghRed    = lipgloss.Color("#f85149")
+	ghYellow = lipgloss.Color("#d29922")
+	ghOrange = lipgloss.Color("#db6d28")
+	ghCyan   = lipgloss.Color("#39c5cf")
+
+	// Selection / chrome
+	ghSelBg    = lipgloss.Color("#2a233a")
 	ghHeaderBg = lipgloss.Color("#161b22")
 )
 
@@ -57,26 +73,26 @@ type model struct {
 	gitOps gitlocal.GitOperations
 	store  *store.Store
 
-	branches      []*types.Branch
-	commits       []*types.Commit
-	graph         []*types.GraphRow
-	changes       []*types.FileChange // working tree changes
-	commitFiles   []*types.FileChange // files from selected commit
-	detailCommit  int
-	notification  string
+	branches     []*types.Branch
+	commits      []*types.Commit
+	graph        []*types.GraphRow
+	changes      []*types.FileChange // working tree changes
+	commitFiles  []*types.FileChange // files from selected commit
+	detailCommit int
+	notification string
 }
 
 func New(gitOps gitlocal.GitOperations, st *store.Store) tea.Model {
 	return &model{
-		gitOps:      gitOps,
-		store:       st,
-		branches:    []*types.Branch{},
-		commits:     []*types.Commit{},
-		graph:       []*types.GraphRow{},
-		changes:     []*types.FileChange{},
-		commitFiles: []*types.FileChange{},
+		gitOps:       gitOps,
+		store:        st,
+		branches:     []*types.Branch{},
+		commits:      []*types.Commit{},
+		graph:        []*types.GraphRow{},
+		changes:      []*types.FileChange{},
+		commitFiles:  []*types.FileChange{},
 		detailCommit: 0,
-		focus:       focusHistory,
+		focus:        focusHistory,
 	}
 }
 
@@ -317,7 +333,7 @@ func (m *model) View() string {
 	sidebarW := max(26, m.width/5)
 	detailsW := max(32, m.width/4)
 	centerW := m.width - sidebarW - detailsW - 4
-	panelH := m.height - 3
+	panelH := m.height - 5
 
 	// ── Panel builder ──
 	baseStyle := lipgloss.NewStyle().
@@ -342,7 +358,7 @@ func (m *model) View() string {
 		Background(ghHeaderBg).
 		Padding(0, 2).
 		Width(m.width).
-		Render(" git-tui  ◆  tab:focus  ↑↓:nav  c:commit  p:push  l:pull  d:diff  r:refresh  q:quit ")
+		Render("\ngit-tui  ◆  tab:focus  ↑↓:nav  c:commit  p:push  l:pull  d:diff  r:refresh  q:quit \n")
 
 	// ── Panels ──
 	left := makePanel(sidebarW, m.focus == focusSidebar, renderSidebar(m))
@@ -446,7 +462,7 @@ func renderHistory(m *model) string {
 			break
 		}
 	}
-	b.WriteString(branchActive.Render(" "+activeBranch+" "))
+	b.WriteString(branchActive.Render(" " + activeBranch + " "))
 	b.WriteString(dimStyle.Render(fmt.Sprintf("%d commits", len(m.commits))))
 	b.WriteString("\n\n")
 
