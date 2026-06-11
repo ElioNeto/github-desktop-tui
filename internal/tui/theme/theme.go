@@ -84,37 +84,37 @@ func BuiltinTheme(name string) *Theme {
 	}
 }
 
-// Light returns the light theme.
+// Light returns the light theme (Glint-inspired clean style).
 func Light() *Theme {
 	t := &Theme{
-		Background: lipgloss.Color("#fdf6e3"),
-		Surface:    lipgloss.Color("#eee8d5"),
-		Primary:    lipgloss.Color("#dc322f"),
-		Accent:     lipgloss.Color("#dc322f"),
-		Text:       lipgloss.Color("#073642"),
-		Muted:      lipgloss.Color("#93a1a1"),
-		Success:    lipgloss.Color("#859900"),
-		Warning:    lipgloss.Color("#b58900"),
-		Error:      lipgloss.Color("#dc322f"),
-		Info:       lipgloss.Color("#268bd2"),
+		Background: lipgloss.Color("#ffffff"),
+		Surface:    lipgloss.Color("#f5f5f5"),
+		Primary:    lipgloss.Color("#ef6c00"), // Glint orange
+		Accent:     lipgloss.Color("#ef6c00"), // Glint orange
+		Text:       lipgloss.Color("#1a1a2e"),
+		Muted:      lipgloss.Color("#9399b2"),
+		Success:    lipgloss.Color("#2e7d32"),
+		Warning:    lipgloss.Color("#f57f17"),
+		Error:      lipgloss.Color("#d32f2f"),
+		Info:       lipgloss.Color("#1565c0"),
 	}
 	t.initStyles()
 	return t
 }
 
-// Default returns the default theme with the user's palette.
+// Default returns the default theme with Glint-inspired colors.
 func Default() *Theme {
 	t := &Theme{
-		Background: lipgloss.Color("#382a2a"),
-		Surface:    lipgloss.Color("#4a3a3a"),
-		Primary:    lipgloss.Color("#ff3d3d"),
-		Accent:     lipgloss.Color("#ff3d3d"),
-		Text:       lipgloss.Color("#e5ebbc"),
-		Muted:      lipgloss.Color("#8dc4b7"),
-		Success:    lipgloss.Color("#8dc4b7"),
-		Warning:    lipgloss.Color("#ff9d7d"),
-		Error:      lipgloss.Color("#ff3d3d"),
-		Info:       lipgloss.Color("#8dc4b7"),
+		Background: lipgloss.Color("#1e1e2e"),
+		Surface:    lipgloss.Color("#2a2a3e"),
+		Primary:    lipgloss.Color("#ef6c00"), // Glint orange
+		Accent:     lipgloss.Color("#ef6c00"), // Glint orange
+		Text:       lipgloss.Color("#cdd6f4"),
+		Muted:      lipgloss.Color("#6c7086"),
+		Success:    lipgloss.Color("#a6e3a1"),
+		Warning:    lipgloss.Color("#f9e2af"),
+		Error:      lipgloss.Color("#f38ba8"),
+		Info:       lipgloss.Color("#89b4fa"),
 	}
 	t.initStyles()
 	return t

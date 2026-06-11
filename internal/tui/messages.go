@@ -202,6 +202,16 @@ type BranchMergeErrorMsg struct {
 	Err error
 }
 
+// --- Graph Log (commit graph) ---
+
+type GraphLogLoadedMsg struct {
+	Rows []*types.GraphRow
+}
+
+type GraphLogErrorMsg struct {
+	Err error
+}
+
 // --- F2.5: Cherry-pick / Revert ---
 
 type CherryPickMsg struct {

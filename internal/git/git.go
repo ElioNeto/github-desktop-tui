@@ -51,6 +51,9 @@ type GitOperations interface {
 	// History
 	Log(ctx context.Context, opts *LogOptions) ([]*types.Commit, error)
 
+	// GraphLog returns commits with ASCII graph lines (from git log --graph)
+	GraphLog(ctx context.Context, opts *LogOptions) ([]*types.GraphRow, error)
+
 	// Branch operations
 	Branches(ctx context.Context) ([]*types.Branch, error)
 	Checkout(ctx context.Context, branch string) error
@@ -475,6 +478,91 @@ func (g *LocalGit) Log(ctx context.Context, opts *LogOptions) ([]*types.Commit, 
 	}
 
 	return commits, nil
+}
+
+// GraphLog executes git log --graph and returns parsed rows with ASCII graph data.
+func (g *LocalGit) GraphLog(ctx context.Context, opts *LogOptions) ([]*types.GraphRow, error) {
+	limit := 50
+	if opts != nil && opts.Limit > 0 {
+		limit = opts.Limit
+	}
+
+	args := []string{
+		"-C", g.repoPath,
+		"log",
+		"--graph",
+		fmt.Sprintf("--max-count=%d", limit),
+		"--pretty=format:%h|%s|%an|%ar|%D",
+	}
+
+	cmd := exec.CommandContext(ctx, "git", args...)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("executar git log --graph: %w", err)
+	}
+
+	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+	rows := make([]*types.GraphRow, 0, len(lines))
+
+	for _, line := range lines {
+		// Split graph prefix from commit data
+		// Graph prefix ends where the first alphanumeric (hash) appears
+		graphEnd := 0
+		for i, ch := range line {
+			if ch == '|' || ch == '*' || ch == '/' || ch == '\\' || ch == ' ' || ch == '_' || ch == '.' {
+				graphEnd = i + 1
+			} else {
+				break
+			}
+		}
+
+		graph := line[:graphEnd]
+		rest := strings.TrimSpace(line[graphEnd:])
+
+		if rest == "" {
+			// Continuation line (just graph, no commit)
+			rows = append(rows, &types.GraphRow{
+				Graph:    graph,
+				IsCommit: strings.Contains(graph, "*"),
+			})
+			continue
+		}
+
+		parts := strings.SplitN(rest, "|", 5)
+		hash := ""
+		message := ""
+		author := ""
+		timeStr := ""
+		ref := ""
+
+		if len(parts) > 0 {
+			hash = parts[0]
+		}
+		if len(parts) > 1 {
+			message = parts[1]
+		}
+		if len(parts) > 2 {
+			author = parts[2]
+		}
+		if len(parts) > 3 {
+			timeStr = parts[3]
+		}
+		if len(parts) > 4 {
+			ref = parts[4]
+		}
+
+		rows = append(rows, &types.GraphRow{
+			Graph:    graph,
+			Hash:     hash,
+			Message:  message,
+			Author:   author,
+			Time:     timeStr,
+			Ref:      ref,
+			IsCommit: strings.Contains(graph, "*"),
+		})
+	}
+
+	return rows, nil
 }
 
 // commitModifiesPath checks whether a commit modifies the given file path.
