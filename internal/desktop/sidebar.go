@@ -62,7 +62,9 @@ func NewSidebar(state *AppState) fyne.CanvasObject {
 	// Refresh on data load
 	oldRefresh := state.onRefresh
 	state.onRefresh = func() {
-		list.Refresh()
+		fyne.Do(func() {
+			list.Refresh()
+		})
 		if oldRefresh != nil {
 			oldRefresh()
 		}

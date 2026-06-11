@@ -180,17 +180,22 @@ func NewCenterPanel(state *AppState) fyne.CanvasObject {
 	// Refresh
 	oldRefresh := state.onRefresh
 	state.onRefresh = func() {
-		graph.Refresh()
-		commitList.Refresh()
-		// Update branch name
 		state.mu.RLock()
+		branchName := ""
 		for _, br := range state.branches {
 			if br.IsActive {
-				header.SetText("▼  " + br.Name)
+				branchName = br.Name
 				break
 			}
 		}
 		state.mu.RUnlock()
+		fyne.Do(func() {
+			graph.Refresh()
+			commitList.Refresh()
+			if branchName != "" {
+				header.SetText("▼  " + branchName)
+			}
+		})
 		if oldRefresh != nil {
 			oldRefresh()
 		}

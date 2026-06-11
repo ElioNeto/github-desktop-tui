@@ -39,14 +39,13 @@ func NewToolbar(state *AppState, onRefresh func()) fyne.CanvasObject {
 
 	// Branch selector (combo)
 	branchSelect := widget.NewSelect([]string{}, func(s string) {
-		// TODO: checkout selected branch
 		state.mu.RLock()
 		for _, br := range state.branches {
 			if br.Name == s {
-				go func() {
-					state.gitOps.Checkout(nil, br.Name)
+				go func(n string) {
+					state.gitOps.Checkout(bgContext, n)
 					state.LoadData()
-				}()
+				}(br.Name)
 				break
 			}
 		}
@@ -54,7 +53,7 @@ func NewToolbar(state *AppState, onRefresh func()) fyne.CanvasObject {
 	})
 	branchSelect.PlaceHolder = "Switch branch..."
 
-	// Update branch list
+	// Update branch list (use fyne.Do for UI thread safety)
 	go func() {
 		state.mu.RLock()
 		names := make([]string, 0, len(state.branches))
@@ -64,9 +63,11 @@ func NewToolbar(state *AppState, onRefresh func()) fyne.CanvasObject {
 			}
 		}
 		state.mu.RUnlock()
-		branchSelect.Options = names
-		branchSelect.Refresh()
-		updateBranch()
+		fyne.Do(func() {
+			branchSelect.Options = names
+			branchSelect.Refresh()
+			updateBranch()
+		})
 	}()
 
 	// Action buttons
@@ -84,7 +85,7 @@ func NewToolbar(state *AppState, onRefresh func()) fyne.CanvasObject {
 		state.mu.RUnlock()
 		if branch != "" {
 			go func() {
-				state.gitOps.Push(nil, "origin", branch, false)
+				state.gitOps.Push(bgContext, "origin", branch, false)
 				state.LoadData()
 			}()
 		}
@@ -92,7 +93,7 @@ func NewToolbar(state *AppState, onRefresh func()) fyne.CanvasObject {
 
 	pullBtn := widget.NewButtonWithIcon("", theme.DownloadIcon(), func() {
 		go func() {
-			state.gitOps.Pull(nil, "origin", "")
+			state.gitOps.Pull(bgContext, "origin", "")
 			state.LoadData()
 		}()
 	})

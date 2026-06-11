@@ -20,6 +20,9 @@ import (
 	"github.com/nicoddemus/github-desktop-tui/pkg/types"
 )
 
+// bgContext is a reusable background context for git operations.
+var bgContext = context.Background()
+
 // AppState holds shared state for all UI components.
 type AppState struct {
 	mu     sync.RWMutex
@@ -123,16 +126,18 @@ func Run(cfg *config.Config) error {
 		),
 	)
 
-	// Store refresh callback
+	// Store refresh callback — must use fyne.Do for thread-safe UI updates
 	state.onRefresh = func() {
-		sidebar.Refresh()
-		centerPanel.Refresh()
-		details.Refresh()
+		fyne.Do(func() {
+			sidebar.Refresh()
+			centerPanel.Refresh()
+			details.Refresh()
+		})
 	}
 
 	w.SetContent(appLayout)
 
-	// Periodic refresh
+	// Periodic refresh (data only, UI refresh via onRefresh)
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		for range ticker.C {
