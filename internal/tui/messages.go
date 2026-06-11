@@ -59,7 +59,8 @@ type GitBranchSwitchMsg struct {
 }
 
 type GitDiffMsg struct {
-	Diff string
+	Diff     string
+	FileName string
 }
 
 type GitDiffErrorMsg struct {
@@ -173,4 +174,48 @@ type RepoRemoveMsg struct {
 
 type ReposUpdatedMsg struct {
 	Repos []*store.TrackedRepo
+}
+
+// --- F2.2: Branch management ---
+
+type BranchCreatedMsg struct {
+	Name string
+}
+
+type BranchCreateErrorMsg struct {
+	Err error
+}
+
+type BranchDeletedMsg struct {
+	Name string
+}
+
+type BranchDeleteErrorMsg struct {
+	Err error
+}
+
+type BranchMergedMsg struct {
+	Branch string
+}
+
+type BranchMergeErrorMsg struct {
+	Err error
+}
+
+// --- F2.5: Cherry-pick / Revert ---
+
+type CherryPickMsg struct {
+	Hash string
+}
+
+type CherryPickErrorMsg struct {
+	Err error
+}
+
+type RevertMsg struct {
+	Hash string
+}
+
+type RevertErrorMsg struct {
+	Err error
 }

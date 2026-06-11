@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -44,6 +45,10 @@ const (
 	ModeAuthMethod
 	ModeAddRemote
 	ModeRepoAdd
+	ModeCreateBranch
+	ModeRenameBranch
+	ModeMergeBranch
+	ModeDiffView
 )
 
 // Model is the root Bubble Tea model.
@@ -105,7 +110,15 @@ type Model struct {
 	remoteInput textinput.Model
 	remoteName  string
 
-	repoAddInput textinput.Model
+	repoAddInput    textinput.Model
+	branchNameInput textinput.Model
+	mergeBranchInput textinput.Model
+
+	// Diff viewer (F2.1)
+	diffContent    string
+	diffLines      []string
+	diffScrollPos  int
+	diffFileName   string
 
 	fileChanges     []*types.FileChange
 	selectedFile    int
@@ -145,6 +158,18 @@ func New(opts Options) *Model {
 	rai.CharLimit = 300
 	rai.Width = 50
 
+	bni := textinput.New()
+	bni.Placeholder = "Nome do novo branch"
+	bni.Focus()
+	bni.CharLimit = 100
+	bni.Width = 40
+
+	mbi := textinput.New()
+	mbi.Placeholder = "Nome do branch para merge"
+	mbi.Focus()
+	mbi.CharLimit = 100
+	mbi.Width = 40
+
 	// Determine available themes
 	availThemes := []string{"dark", "light"}
 	themeIdx := 0
@@ -171,8 +196,11 @@ func New(opts Options) *Model {
 		commitInput: ci,
 		authInput:   ai,
 		remoteInput: ri,
-		repoAddInput: rai,
-		fileChanges:     make([]*types.FileChange, 0),
+		repoAddInput:     rai,
+		branchNameInput:  bni,
+		mergeBranchInput: mbi,
+		diffLines:        make([]string, 0),
+		fileChanges:      make([]*types.FileChange, 0),
 		selectedFile:    -1,
 		stagingSelected: make(map[int]bool),
 		timelineCommits: make([]*types.Commit, 0),
@@ -330,6 +358,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.setNotification("error", msg.Err.Error())
 		return m, nil
 
+	case GitDiffMsg:
+		m.mode = ModeDiffView
+		m.diffContent = msg.Diff
+		m.diffLines = strings.Split(msg.Diff, "\n")
+		m.diffScrollPos = 0
+		m.diffFileName = msg.FileName
+		return m, nil
+
+	case GitDiffErrorMsg:
+		m.setNotification("error", msg.Err.Error())
+		return m, nil
+
 	case RemotesLoadedMsg:
 		m.remoteList = msg.Remotes
 		return m, nil
@@ -412,6 +452,50 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ReposUpdatedMsg:
 		m.setNotification("info", "Lista de repositórios atualizada")
 		return m, nil
+
+	// F2.2: Branch management
+	case BranchCreatedMsg:
+		m.setNotification("success", fmt.Sprintf("Branch criado: %s", msg.Name))
+		m.mode = ModeNormal
+		return m, m.loadBranches()
+
+	case BranchCreateErrorMsg:
+		m.setNotification("error", msg.Err.Error())
+		m.mode = ModeNormal
+		return m, nil
+
+	case BranchDeletedMsg:
+		m.setNotification("success", fmt.Sprintf("Branch deletado: %s", msg.Name))
+		return m, m.loadBranches()
+
+	case BranchDeleteErrorMsg:
+		m.setNotification("error", msg.Err.Error())
+		return m, nil
+
+	case BranchMergedMsg:
+		m.setNotification("success", fmt.Sprintf("Merge concluído: %s", msg.Branch))
+		return m, tea.Batch(m.loadBranches(), m.loadCommits)
+
+	case BranchMergeErrorMsg:
+		m.setNotification("error", msg.Err.Error())
+		return m, nil
+
+	// F2.5: Cherry-pick / Revert
+	case CherryPickMsg:
+		m.setNotification("success", fmt.Sprintf("Cherry-pick: %s", msg.Hash[:7]))
+		return m, tea.Batch(m.loadCommits, m.loadGitStatus())
+
+	case CherryPickErrorMsg:
+		m.setNotification("error", msg.Err.Error())
+		return m, nil
+
+	case RevertMsg:
+		m.setNotification("success", fmt.Sprintf("Revertido: %s", msg.Hash[:7]))
+		return m, tea.Batch(m.loadCommits, m.loadGitStatus())
+
+	case RevertErrorMsg:
+		m.setNotification("error", msg.Err.Error())
+		return m, nil
 	}
 
 	return m, nil
@@ -431,6 +515,14 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleRemoteInput(msg)
 	case ModeRepoAdd:
 		return m.handleRepoAddInput(msg)
+	case ModeCreateBranch:
+		return m.handleCreateBranchInput(msg)
+	case ModeRenameBranch:
+		return m.handleRenameBranchInput(msg)
+	case ModeMergeBranch:
+		return m.handleMergeBranchInput(msg)
+	case ModeDiffView:
+		return m.handleDiffViewInput(msg)
 	}
 
 	switch {
@@ -577,6 +669,55 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.focused == PanelLeft {
 			m.handleFavRepo()
 			return m, nil
+		}
+		return m, nil
+
+	// F2.2: Branch management (when center panel is focused and showing branches)
+	case key.Matches(msg, m.keys.CreateBranch):
+		if m.centerView == ViewBranchList || m.focused == PanelCenter {
+			m.mode = ModeCreateBranch
+			m.branchNameInput.SetValue("")
+			m.branchNameInput.Focus()
+			return m, nil
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keys.DeleteBranch):
+		if m.centerView == ViewBranchList {
+			return m.handleDeleteBranch()
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keys.MergeBranch):
+		if m.centerView == ViewBranchList {
+			m.mode = ModeMergeBranch
+			m.mergeBranchInput.SetValue("")
+			m.mergeBranchInput.Focus()
+			return m, nil
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keys.RenameBranch):
+		if m.centerView == ViewBranchList {
+			m.mode = ModeRenameBranch
+			m.branchNameInput.SetValue("")
+			m.branchNameInput.Focus()
+			return m, nil
+		}
+		return m, nil
+
+	// F2.5: Cherry-pick / Revert (from commit log)
+	case key.Matches(msg, m.keys.CherryPick):
+		if m.centerView == ViewCommitLog && m.store.Commits.Selected() != nil {
+			hash := m.store.Commits.Selected().Hash
+			return m, m.executeCherryPick(hash)
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keys.Revert):
+		if m.centerView == ViewCommitLog && m.store.Commits.Selected() != nil {
+			hash := m.store.Commits.Selected().Hash
+			return m, m.executeRevert(hash)
 		}
 		return m, nil
 	}
@@ -766,6 +907,207 @@ func (m Model) executeRepoAdd(path string) tea.Cmd {
 }
 
 // ---------------------------------------------------------------------------
+// F2: Branch input handlers
+// ---------------------------------------------------------------------------
+
+func (m Model) handleCreateBranchInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEnter:
+		name := strings.TrimSpace(m.branchNameInput.Value())
+		if name == "" {
+			m.setNotification("warning", "Nome do branch não pode estar vazio")
+			return m, nil
+		}
+		return m, m.executeCreateBranch(name)
+	case tea.KeyEsc:
+		m.mode = ModeNormal
+		return m, nil
+	default:
+		var cmd tea.Cmd
+		m.branchNameInput, cmd = m.branchNameInput.Update(msg)
+		return m, cmd
+	}
+}
+
+func (m Model) handleRenameBranchInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEnter:
+		name := strings.TrimSpace(m.branchNameInput.Value())
+		if name == "" {
+			m.setNotification("warning", "Novo nome não pode estar vazio")
+			return m, nil
+		}
+		return m, m.executeRenameBranch(name)
+	case tea.KeyEsc:
+		m.mode = ModeNormal
+		return m, nil
+	default:
+		var cmd tea.Cmd
+		m.branchNameInput, cmd = m.branchNameInput.Update(msg)
+		return m, cmd
+	}
+}
+
+func (m Model) handleMergeBranchInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEnter:
+		branch := strings.TrimSpace(m.mergeBranchInput.Value())
+		if branch == "" {
+			m.setNotification("warning", "Nome do branch não pode estar vazio")
+			return m, nil
+		}
+		return m, m.executeMerge(branch)
+	case tea.KeyEsc:
+		m.mode = ModeNormal
+		return m, nil
+	default:
+		var cmd tea.Cmd
+		m.mergeBranchInput, cmd = m.mergeBranchInput.Update(msg)
+		return m, cmd
+	}
+}
+
+func (m Model) handleDeleteBranch() (tea.Model, tea.Cmd) {
+	branches := m.store.Branches.Branches()
+	active := m.store.Branches.Active()
+	for _, b := range branches {
+		if b.IsActive {
+			continue
+		}
+		if b.Name == active {
+			continue
+		}
+		// Delete the first non-active branch
+		return m, m.executeDeleteBranch(b.Name)
+	}
+	m.setNotification("warning", "Nenhum branch para deletar (além do ativo)")
+	return m, nil
+}
+
+// ---------------------------------------------------------------------------
+// F2: Diff viewer input
+// ---------------------------------------------------------------------------
+
+func (m Model) handleDiffViewInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		m.mode = ModeNormal
+		m.diffContent = ""
+		m.diffLines = nil
+		m.diffScrollPos = 0
+		return m, nil
+	case tea.KeyUp:
+		if m.diffScrollPos > 0 {
+			m.diffScrollPos--
+		}
+		return m, nil
+	case tea.KeyDown:
+		if m.diffScrollPos < len(m.diffLines)-1 {
+			m.diffScrollPos++
+		}
+		return m, nil
+	case tea.KeyPgUp:
+		m.diffScrollPos -= m.height / 2
+		if m.diffScrollPos < 0 {
+			m.diffScrollPos = 0
+		}
+		return m, nil
+	case tea.KeyPgDown:
+		m.diffScrollPos += m.height / 2
+		if m.diffScrollPos >= len(m.diffLines) {
+			m.diffScrollPos = len(m.diffLines) - 1
+		}
+		return m, nil
+	default:
+		return m, nil
+	}
+}
+
+// ---------------------------------------------------------------------------
+// F2: Branch management commands
+// ---------------------------------------------------------------------------
+
+func (m Model) executeCreateBranch(name string) tea.Cmd {
+	return func() tea.Msg {
+		base := m.store.Branches.Active()
+		ctx := context.TODO()
+		if err := m.gitOps.CreateBranch(ctx, name, base); err != nil {
+			return BranchCreateErrorMsg{Err: err}
+		}
+		m.mode = ModeNormal
+		return BranchCreatedMsg{Name: name}
+	}
+}
+
+func (m Model) executeDeleteBranch(name string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.TODO()
+		if err := m.gitOps.DeleteBranch(ctx, name, false); err != nil {
+			return BranchDeleteErrorMsg{Err: err}
+		}
+		return BranchDeletedMsg{Name: name}
+	}
+}
+
+func (m Model) executeMerge(branch string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.TODO()
+		if err := m.gitOps.Merge(ctx, branch); err != nil {
+			return BranchMergeErrorMsg{Err: err}
+		}
+		m.mode = ModeNormal
+		return BranchMergedMsg{Branch: branch}
+	}
+}
+
+func (m Model) executeRenameBranch(name string) tea.Cmd {
+	return func() tea.Msg {
+		// Git doesn't have a native rename; use branch -m
+		oldName := m.store.Branches.Active()
+		ctx := context.TODO()
+		// Create new, delete old
+		if err := m.gitOps.CreateBranch(ctx, name, oldName); err != nil {
+			return BranchCreateErrorMsg{Err: err}
+		}
+		if err := m.gitOps.DeleteBranch(ctx, oldName, false); err != nil {
+			return BranchDeleteErrorMsg{Err: err}
+		}
+		if err := m.gitOps.Checkout(ctx, name); err != nil {
+			return BranchCreateErrorMsg{Err: err}
+		}
+		m.mode = ModeNormal
+		return BranchCreatedMsg{Name: name}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// F2.5: Cherry-pick / Revert commands
+// ---------------------------------------------------------------------------
+
+func (m Model) executeCherryPick(hash string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.TODO()
+		// Use git cherry-pick via exec since go-git doesn't support it natively
+		cmd := exec.CommandContext(ctx, "git", "-C", m.gitOps.Root(), "cherry-pick", hash)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return CherryPickErrorMsg{Err: fmt.Errorf("cherry-pick %s: %s: %w", hash[:7], strings.TrimSpace(string(out)), err)}
+		}
+		return CherryPickMsg{Hash: hash}
+	}
+}
+
+func (m Model) executeRevert(hash string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.TODO()
+		cmd := exec.CommandContext(ctx, "git", "-C", m.gitOps.Root(), "revert", "--no-edit", hash)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return RevertErrorMsg{Err: fmt.Errorf("revert %s: %s: %w", hash[:7], strings.TrimSpace(string(out)), err)}
+		}
+		return RevertMsg{Hash: hash}
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Action handlers
 // ---------------------------------------------------------------------------
 
@@ -894,6 +1236,9 @@ func (m Model) handleDiff() (tea.Model, tea.Cmd) {
 	if m.showStaging && m.selectedFile >= 0 && m.selectedFile < len(m.fileChanges) {
 		return m, m.executeDiff(m.fileChanges[m.selectedFile].Path)
 	}
+	if m.centerView == ViewCommitLog && m.store.Commits.Selected() != nil {
+		return m, m.executeCommitDiff(m.store.Commits.Selected().Hash)
+	}
 	return m, nil
 }
 
@@ -1004,7 +1349,19 @@ func (m Model) executeDiff(path string) tea.Cmd {
 		if err != nil {
 			return ErrorMsg{Err: err}
 		}
-		return GitDiffMsg{Diff: diff}
+		return GitDiffMsg{Diff: diff, FileName: path}
+	}
+}
+
+func (m Model) executeCommitDiff(hash string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.TODO()
+		cmd := exec.CommandContext(ctx, "git", "-C", m.gitOps.Root(), "show", "--no-color", hash)
+		out, err := cmd.Output()
+		if err != nil {
+			return ErrorMsg{Err: fmt.Errorf("mostrar commit %s: %w", hash[:7], err)}
+		}
+		return GitDiffMsg{Diff: string(out), FileName: hash[:7]}
 	}
 }
 
@@ -1121,6 +1478,18 @@ func (m Model) View() string {
 	}
 	if m.mode == ModeCommitMessage {
 		b.WriteString("\n" + m.renderCommitInputOverlay())
+	}
+	if m.mode == ModeDiffView {
+		b.WriteString("\n" + m.renderDiffViewerOverlay())
+	}
+	if m.mode == ModeCreateBranch {
+		b.WriteString("\n" + m.renderBranchInputOverlay(" Criar Branch ", m.branchNameInput.View(), "C"))
+	}
+	if m.mode == ModeRenameBranch {
+		b.WriteString("\n" + m.renderBranchInputOverlay(" Renomear Branch ", m.branchNameInput.View(), "R"))
+	}
+	if m.mode == ModeMergeBranch {
+		b.WriteString("\n" + m.renderBranchInputOverlay(" Merge Branch ", m.mergeBranchInput.View(), "m"))
 	}
 	if m.notification != nil && time.Since(m.notifTimer) < 4*time.Second {
 		b.WriteString("\n" + m.renderNotification())
@@ -1550,14 +1919,18 @@ func (m Model) renderCommandBar() string {
 			{"c", "commit"},
 			{"p", "push"},
 			{"l", "pull"},
+			{"d", "diff"},
+			{"y", "cherry-pick"},
+			{"V", "revert"},
 			{"/", "timeline"},
 			{"P", "auth"},
+			{"C", "branch"},
+			{"m", "merge"},
 			{"r", "refresh"},
 			{"1-3", "painel"},
 			{"T", "tema"},
 			{"N", "hist"},
 			{"?", "ajuda"},
-			{"q", "sair"},
 		}
 		cmds = append(cmds, globalCmds...)
 	}
@@ -1586,6 +1959,91 @@ func (m Model) renderCommandBar() string {
 		Padding(0, 2)
 
 	return barStyle.Render(cmdStr + strings.Repeat(" ", spaces))
+}
+
+// ---------------------------------------------------------------------------
+// F2: Diff viewer overlay
+// ---------------------------------------------------------------------------
+
+func (m Model) renderDiffViewerOverlay() string {
+	ovWidth := m.width - 8
+	if ovWidth > 120 {
+		ovWidth = 120
+	}
+	ovHeight := m.height - 6
+	if ovHeight < 10 {
+		ovHeight = 10
+	}
+
+	title := m.theme.OverlayTitle.Render(" Diff: " + m.diffFileName + " ")
+	help := m.theme.DimmedStyle.Render(" ↑↓: scroll  pgup/pgdn: página  esc: fechar ")
+
+	var inner strings.Builder
+	maxLines := ovHeight - 4
+	start := m.diffScrollPos
+	end := start + maxLines
+	if end > len(m.diffLines) {
+		end = len(m.diffLines)
+	}
+
+	for i := start; i < end; i++ {
+		line := m.diffLines[i]
+		lineStyle := m.theme.BaseStyle
+
+		if len(line) > 0 {
+			switch line[0] {
+			case '+':
+				lineStyle = m.theme.DiffAdded
+			case '-':
+				lineStyle = m.theme.DiffDeleted
+			case '@':
+				lineStyle = m.theme.DiffAdded
+			case 'd':
+				if strings.HasPrefix(line, "diff --git") {
+					lineStyle = m.theme.FocusedStyle
+				}
+			}
+		}
+
+		disp := line
+		if len(disp) > ovWidth-6 {
+			disp = disp[:ovWidth-9] + "…"
+		}
+		inner.WriteString(lineStyle.Render(" " + disp))
+		if i < end-1 {
+			inner.WriteString("\n")
+		}
+	}
+
+	// Scroll indicator
+	scrollInfo := ""
+	if len(m.diffLines) > maxLines {
+		pct := int(float64(m.diffScrollPos) / float64(len(m.diffLines)-maxLines) * 100)
+		scrollInfo = fmt.Sprintf("  %d%% (%d/%d)", pct, m.diffScrollPos, len(m.diffLines))
+	}
+
+	footer := title + "\n" + help + scrollInfo + "\n" + inner.String()
+	content := lipgloss.NewStyle().Width(ovWidth - 2).Render(footer)
+	return m.theme.OverlayBorder.Width(ovWidth).Render(centeredText(content, m.width, ovWidth))
+}
+
+// ---------------------------------------------------------------------------
+// F2: Branch input overlay (reusable for create, rename, merge)
+// ---------------------------------------------------------------------------
+
+func (m Model) renderBranchInputOverlay(title string, inputView string, key string) string {
+	ovWidth := 50
+	titleRendered := m.theme.OverlayTitle.Render(title)
+	help := m.theme.DimmedStyle.Render(" ↵: confirmar  esc: cancelar ")
+
+	var inner strings.Builder
+	inner.WriteString("\n")
+	inner.WriteString("  " + inputView + "\n")
+	inner.WriteString("\n")
+	inner.WriteString(m.theme.DimmedStyle.Render("  Pressione " + key + " ou use o painel de branches"))
+
+	content := lipgloss.NewStyle().Width(ovWidth - 2).Render(titleRendered + "\n" + help + "\n" + inner.String())
+	return m.theme.OverlayBorder.Width(ovWidth).Render(centeredText(content, m.width, ovWidth))
 }
 
 // ---------------------------------------------------------------------------

@@ -43,6 +43,16 @@ type KeyMap struct {
 	RepoScan   key.Binding
 	RepoRemove key.Binding
 	RepoFav    key.Binding
+
+	// F2.2 - Branch management
+	CreateBranch key.Binding
+	DeleteBranch key.Binding
+	MergeBranch  key.Binding
+	RenameBranch key.Binding
+
+	// F2.5 - Cherry-pick / Revert
+	CherryPick key.Binding
+	Revert     key.Binding
 }
 
 // DefaultKeyMap returns the default keybinding set.
@@ -179,6 +189,34 @@ func DefaultKeyMap() KeyMap {
 		RepoFav: key.NewBinding(
 			key.WithKeys("f"),
 			key.WithHelp("f", "favoritar"),
+		),
+
+		// F2.2 - Branch management
+		CreateBranch: key.NewBinding(
+			key.WithKeys("C"),
+			key.WithHelp("C", "criar branch"),
+		),
+		DeleteBranch: key.NewBinding(
+			key.WithKeys("D"),
+			key.WithHelp("D", "deletar branch"),
+		),
+		MergeBranch: key.NewBinding(
+			key.WithKeys("m"),
+			key.WithHelp("m", "merge branch"),
+		),
+		RenameBranch: key.NewBinding(
+			key.WithKeys("R"),
+			key.WithHelp("R", "renomear branch"),
+		),
+
+		// F2.5 - Cherry-pick / Revert
+		CherryPick: key.NewBinding(
+			key.WithKeys("y"),
+			key.WithHelp("y", "cherry-pick commit"),
+		),
+		Revert: key.NewBinding(
+			key.WithKeys("V"),
+			key.WithHelp("V", "reverter commit"),
 		),
 	}
 }
