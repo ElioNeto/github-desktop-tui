@@ -54,6 +54,9 @@ type GitOperations interface {
 	// GraphLog returns commits with ASCII graph lines (from git log --graph)
 	GraphLog(ctx context.Context, opts *LogOptions) ([]*types.GraphRow, error)
 
+	// GetCommitFiles returns the list of files changed in a specific commit.
+	GetCommitFiles(ctx context.Context, hash string) ([]*types.FileChange, error)
+
 	// Branch operations
 	Branches(ctx context.Context) ([]*types.Branch, error)
 	Checkout(ctx context.Context, branch string) error
@@ -599,6 +602,53 @@ func commitModifiesPath(c *object.Commit, path string) bool {
 		}
 	}
 	return false
+}
+
+// GetCommitFiles returns files changed in a specific commit (using git diff-tree).
+func (g *LocalGit) GetCommitFiles(ctx context.Context, hash string) ([]*types.FileChange, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", g.repoPath,
+		"diff-tree", "--no-commit-id", "--name-status", "-r", hash)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("get commit files %s: %w", hash[:7], err)
+	}
+
+	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+	var files []*types.FileChange
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\t", 2)
+		if len(parts) < 2 {
+			continue
+		}
+		statusStr := parts[0]
+		path := parts[1]
+
+		status := types.FileStatusModified
+		switch statusStr[0] {
+		case 'A':
+			status = types.FileStatusAdded
+		case 'D':
+			status = types.FileStatusDeleted
+		case 'M':
+			status = types.FileStatusModified
+		case 'R':
+			status = types.FileStatusRenamed
+		case 'C':
+			status = types.FileStatusCopied
+		}
+
+		files = append(files, &types.FileChange{
+			Path:   path,
+			Status: status,
+		})
+	}
+
+	return files, nil
 }
 
 // ---------------------------------------------------------------------------

@@ -60,10 +60,10 @@ type model struct {
 	branches      []*types.Branch
 	commits       []*types.Commit
 	graph         []*types.GraphRow
-	changes       []*types.FileChange
+	changes       []*types.FileChange // working tree changes
+	commitFiles   []*types.FileChange // files from selected commit
 	detailCommit  int
 	notification  string
-	notifDeadline int // tick countdown
 }
 
 func New(gitOps gitlocal.GitOperations, st *store.Store) tea.Model {
@@ -74,6 +74,7 @@ func New(gitOps gitlocal.GitOperations, st *store.Store) tea.Model {
 		commits:     []*types.Commit{},
 		graph:       []*types.GraphRow{},
 		changes:     []*types.FileChange{},
+		commitFiles: []*types.FileChange{},
 		detailCommit: 0,
 		focus:       focusHistory,
 	}
@@ -89,6 +90,10 @@ type dataLoadedMsg struct {
 }
 
 type notifMsg struct{ text string }
+type commitFilesMsg struct {
+	files []*types.FileChange
+	err   error
+}
 
 // ── Init ──
 func (m *model) Init() tea.Cmd {
@@ -153,11 +158,22 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.detailCommit >= len(m.commits) {
 			m.detailCommit = 0
 		}
-		_ = msg // use all fields
-		return m, nil
+		// Load files for selected commit
+		cmds := []tea.Cmd{}
+		if len(m.commits) > 0 {
+			cmds = append(cmds, m.loadCommitFiles())
+		}
+		return m, tea.Batch(cmds...)
 
 	case notifMsg:
 		m.notification = msg.text
+		return m, nil
+
+	case commitFilesMsg:
+		if msg.err != nil {
+			m.notification = fmt.Sprintf("Files error: %v", msg.err)
+		}
+		m.commitFiles = msg.files
 		return m, nil
 
 	case tea.KeyMsg:
@@ -208,9 +224,9 @@ func (m *model) navUp() (tea.Model, tea.Cmd) {
 	case focusHistory:
 		if m.detailCommit > 0 {
 			m.detailCommit--
+			return m, m.loadCommitFiles()
 		}
 	case focusSidebar:
-		// no-op for now
 	}
 	return m, nil
 }
@@ -220,9 +236,24 @@ func (m *model) navDown() (tea.Model, tea.Cmd) {
 	case focusHistory:
 		if m.detailCommit < len(m.commits)-1 {
 			m.detailCommit++
+			return m, m.loadCommitFiles()
 		}
 	}
 	return m, nil
+}
+
+func (m *model) loadCommitFiles() tea.Cmd {
+	return func() tea.Msg {
+		if m.detailCommit < 0 || m.detailCommit >= len(m.commits) {
+			return commitFilesMsg{files: []*types.FileChange{}}
+		}
+		hash := m.commits[m.detailCommit].Hash
+		files, err := m.gitOps.GetCommitFiles(context.TODO(), hash)
+		if err != nil {
+			return commitFilesMsg{files: []*types.FileChange{}, err: err}
+		}
+		return commitFilesMsg{files: files}
+	}
 }
 
 func (m *model) doCommit() tea.Cmd {
@@ -549,15 +580,16 @@ func renderDetails(m *model) string {
 	b.WriteString(fmt.Sprintf("%s  %s\n", labelStyle.Render("Date    "), valueStyle.Render(c.Timestamp.Format("02 Jan 2006 15:04"))))
 	b.WriteString(fmt.Sprintf("%s  %s\n", labelStyle.Render("Message "), valueStyle.Render(c.MessageHead)))
 
-	// Changed files
+	// Changed files (from selected commit)
 	b.WriteString("\n")
 	b.WriteString(sectionColor.Render(" Files "))
 	b.WriteString("\n\n")
 
-	if len(m.changes) == 0 {
+	files := m.commitFiles
+	if len(files) == 0 {
 		b.WriteString(mutedStyle.Render("  No files changed"))
 	} else {
-		for _, fc := range m.changes {
+		for _, fc := range files {
 			badge, style := changeBadge(fc.Status)
 			b.WriteString(fmt.Sprintf("  %s  %s\n", style.Render(badge), textStyle.Render(fc.Path)))
 		}
