@@ -46,13 +46,16 @@ type Layout struct {
 
 	StatusBarHeight int
 	PanelHeight     int
+
+	// Gap between panels (for borders)
+	PanelGap int
 }
 
 // LayoutRatios defines the default width ratios for the three panels.
-var LayoutRatios = [3]float64{0.25, 0.45, 0.30}
+var LayoutRatios = [3]float64{0.22, 0.48, 0.30}
 
 // MinWidths defines the minimum width for each panel.
-var MinWidths = [3]int{30, 50, 35}
+var MinWidths = [3]int{28, 45, 30}
 
 // CalculateLayout computes panel dimensions from total terminal size.
 func CalculateLayout(width, height int) Layout {
@@ -60,6 +63,7 @@ func CalculateLayout(width, height int) Layout {
 		Width:           width,
 		Height:          height,
 		StatusBarHeight: 1,
+		PanelGap:        0, // No gap - borders take space from the panel content
 	}
 
 	// Reserve space for status bar
@@ -83,10 +87,8 @@ func CalculateLayout(width, height int) Layout {
 	// Second pass: enforce minimum widths
 	for i, min := range MinWidths {
 		if rawWidths[i] < min {
-			// Take from the largest panel
 			shortfall := min - rawWidths[i]
 			rawWidths[i] = min
-			// Find the largest other panel to give space
 			largestIdx := -1
 			largestVal := 0
 			for j := range rawWidths {
