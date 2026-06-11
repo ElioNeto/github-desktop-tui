@@ -232,8 +232,7 @@ func (ft *FileTree) Render(width, height int, th *theme.Theme) string {
 	}
 
 	// Header
-	titleStyle := th.TitleStyle
-	b.WriteString(titleStyle.Render(" Files "))
+	b.WriteString(th.FocusedStyle.Render(" Files "))
 	b.WriteString("\n")
 
 	// Separator

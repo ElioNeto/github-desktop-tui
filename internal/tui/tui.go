@@ -1497,48 +1497,46 @@ func refreshGitStatus(gitOps gitlocal.GitOperations) tea.Cmd {
 
 func (m Model) View() string {
 	if !m.ready {
-		return m.theme.TitleStyle.Render(" Carregando... ")
+		return m.theme.DimmedStyle.Render(" Loading... ")
 	}
 
 	var b strings.Builder
 
-	// ── Panel content with borders (F1.3) ──
+	// ── Render panel contents ──
 	leftContent := m.renderLeftPanel()
 	centerContent := m.renderCenterPanel()
 	rightContent := m.renderRightPanel()
 
-	// Apply panel styles
-	leftStyle := m.theme.PanelStyle
-	if m.focused == PanelLeft {
-		leftStyle = m.theme.ActivePanelStyle
-	}
-	centerStyle := m.theme.PanelStyle
-	if m.focused == PanelCenter {
-		centerStyle = m.theme.ActivePanelStyle
-	}
-	rightStyle := m.theme.PanelStyle
-	if m.focused == PanelRight {
-		rightStyle = m.theme.ActivePanelStyle
-	}
+	// Glint-style layout: panels side by side with thin separators
+	// Separator line (vertical bar between panels)
+	sep := m.theme.DimmedStyle.Render("┃")
+	activeSep := m.theme.FocusedStyle.Render("┃")
 
-	leftContent = leftStyle.Width(m.layout.LeftWidth).Render(leftContent)
-	centerContent = centerStyle.Width(m.layout.CenterWidth).Render(centerContent)
-	rightContent = rightStyle.Width(m.layout.RightWidth).Render(rightContent)
-
-	// ── Combine ──
+	// For each line, write: left | center | right
 	for line := 0; line < m.layout.PanelHeight-1; line++ {
 		leftLine := getLine(leftContent, line, m.layout.LeftWidth)
+		// Choose separator style based on which panel is focused
+		sepLeft := sep
+		sepRight := sep
+		if m.focused == PanelLeft {
+			sepLeft = activeSep
+		} else if m.focused == PanelCenter {
+			sepLeft = activeSep
+			sepRight = activeSep
+		} else if m.focused == PanelRight {
+			sepRight = activeSep
+		}
 		centerLine := getLine(centerContent, line, m.layout.CenterWidth)
 		rightLine := getLine(rightContent, line, m.layout.RightWidth)
 		b.WriteString(leftLine)
+		b.WriteString(sepLeft)
 		b.WriteString(centerLine)
+		b.WriteString(sepRight)
 		b.WriteString(rightLine)
-		if line < m.layout.PanelHeight-1 {
-			b.WriteString("\n")
-		}
+		b.WriteString("\n")
 	}
 
-	// ── Status bar ──
+	// ── Status bar (thin, minimal) ──
 	b.WriteString("\n")
 	b.WriteString(m.renderStatusBar())
 	b.WriteString("\n")
@@ -1573,10 +1571,10 @@ func (m Model) View() string {
 		b.WriteString("\n" + m.renderDiffViewerOverlay())
 	}
 	if m.mode == ModeCreateBranch {
-		b.WriteString("\n" + m.renderBranchInputOverlay(" Criar Branch ", m.branchNameInput.View(), "C"))
+		b.WriteString("\n" + m.renderBranchInputOverlay(" Create Branch ", m.branchNameInput.View(), "C"))
 	}
 	if m.mode == ModeRenameBranch {
-		b.WriteString("\n" + m.renderBranchInputOverlay(" Renomear Branch ", m.branchNameInput.View(), "R"))
+		b.WriteString("\n" + m.renderBranchInputOverlay(" Rename Branch ", m.branchNameInput.View(), "R"))
 	}
 	if m.mode == ModeMergeBranch {
 		b.WriteString("\n" + m.renderBranchInputOverlay(" Merge Branch ", m.mergeBranchInput.View(), "m"))
@@ -1589,49 +1587,32 @@ func (m Model) View() string {
 }
 
 // ---------------------------------------------------------------------------
-// Panel header renderer
+// Panel content — Glint-style panels
 // ---------------------------------------------------------------------------
 
-func (m Model) renderPanelHeader(title string, isFocused bool) string {
-	style := m.theme.DimmedStyle
-	if isFocused {
-		style = m.theme.ActivePanelTitleStyle
-		title = "●" + title[1:]
-	}
-	// Pad to panel width
-	return style.Render(title)
+// renderSectionHeader renders a clean section header like Glint's "Repositories"
+func (m Model) renderSectionHeader(title string) string {
+	return m.theme.FocusedStyle.Render(" " + title + " ")
 }
-
-// ---------------------------------------------------------------------------
-// Panel content
-// ---------------------------------------------------------------------------
 
 func (m Model) renderLeftPanel() string {
 	var b strings.Builder
 
-	width := m.layout.LeftWidth
-
-	// ── Header: active repo name + branch ──
-	b.WriteString(m.theme.BranchStyle.Render(" " + m.store.Branches.Active() + " "))
-	b.WriteString("\n")
-	b.WriteString(m.theme.DimmedStyle.Render(strings.Repeat("─", width)))
-	b.WriteString("\n")
-
-	// ── Repositories ──
-	b.WriteString(m.theme.FocusedStyle.Render(" Repositories "))
+	// ── Repositories section (like Glint sidebar) ──
+	b.WriteString(m.renderSectionHeader("Repositories"))
 	b.WriteString("\n")
 
 	trackedRepos := m.repoManager.List()
+	sel := m.store.Repositories.SelectedIndex()
+
 	if len(trackedRepos) == 0 {
-		b.WriteString(m.theme.DimmedStyle.Render("  (a: add, A: scan)"))
-		b.WriteString("\n")
+		b.WriteString(m.theme.DimmedStyle.Render("  No repos yet (a: add, A: scan)"))
 	} else {
-		maxRepos := (m.layout.PanelHeight - 6) / 2
-		if maxRepos < 2 {
-			maxRepos = 2
+		maxRepos := m.layout.PanelHeight - 8
+		if maxRepos < 3 {
+			maxRepos = 3
 		}
 		start := 0
-		sel := m.store.Repositories.SelectedIndex()
 		if sel >= maxRepos {
 			start = sel - maxRepos + 1
 		}
@@ -1639,32 +1620,44 @@ func (m Model) renderLeftPanel() string {
 		if end > len(trackedRepos) {
 			end = len(trackedRepos)
 		}
+
 		for i := start; i < end; i++ {
 			repo := trackedRepos[i]
-			style := m.theme.BaseStyle
-			prefix := "  "
+			line := ""
 			if i == sel {
-				style = m.theme.SelectedStyle
-				prefix = m.theme.FocusedStyle.Render("▸")
+				// Highlighted row — show branch name like Glint
+				line = fmt.Sprintf(" %s  %s  %s",
+					m.theme.FocusedStyle.Render("▸"),
+					m.theme.BaseStyle.Render(repo.Name),
+					m.theme.BranchStyle.Render(m.store.Branches.Active()))
+			} else {
+				fav := " "
+				if repo.IsFavorite {
+					fav = m.theme.FocusedStyle.Render("★")
+				} else {
+					fav = m.theme.DimmedStyle.Render(" ")
+				}
+				line = fmt.Sprintf("   %s %s", fav, m.theme.DimmedStyle.Render(repo.Name))
 			}
-			fav := ""
-			if repo.IsFavorite {
-				fav = m.theme.FocusedStyle.Render("★ ")
-			}
-			line := fmt.Sprintf(" %s%s%s", prefix, fav, repo.Name)
-			b.WriteString(style.Render(line))
+			b.WriteString(line)
 			if i < end-1 {
 				b.WriteString("\n")
 			}
 		}
 		if len(trackedRepos) > maxRepos {
-			b.WriteString(fmt.Sprintf("\n%s", m.theme.DimmedStyle.Render(fmt.Sprintf("  ↓ %d more", len(trackedRepos)-end))))
+			b.WriteString(fmt.Sprintf("\n%s", m.theme.DimmedStyle.Render(fmt.Sprintf("  ↓ %d more repos", len(trackedRepos)-end))))
 		}
 	}
 
-	// ── Provider + Auth ──
+	// ── Current branch info (clean) ──
+	b.WriteString("\n\n")
+	b.WriteString(m.renderSectionHeader("Branch"))
 	b.WriteString("\n")
-	b.WriteString(m.theme.FocusedStyle.Render(" Provider "))
+	b.WriteString(fmt.Sprintf("  %s\n", m.theme.BranchStyle.Render(m.store.Branches.Active())))
+
+	// ── Provider ──
+	b.WriteString("\n")
+	b.WriteString(m.renderSectionHeader("Provider"))
 	b.WriteString("\n")
 	for _, p := range m.registry.All() {
 		dot := m.theme.DimmedStyle.Render("○")
@@ -1675,25 +1668,22 @@ func (m Model) renderLeftPanel() string {
 		if p.Name() == m.store.Settings.ActiveProvider() {
 			active = m.theme.FocusedStyle.Render(" ←")
 		}
-		b.WriteString(fmt.Sprintf("  %s %s%s%s\n", dot, p.Icon(), p.DisplayName(), active))
+		b.WriteString(fmt.Sprintf("  %s %s%s\n", dot, p.DisplayName(), active))
 	}
 
-	// ── Quick keys ──
+	// ── Shortcuts (compact, like Glint's minimal UI) ──
 	b.WriteString("\n")
-	b.WriteString(m.theme.FocusedStyle.Render(" Keys "))
+	b.WriteString(m.renderSectionHeader("Keys"))
 	b.WriteString("\n")
 	keys := []struct{ k, d string }{
-		{"c", "commit"}, {"s", "stage"}, {"p", "push"}, {"l", "pull"},
-		{"b", "branch"}, {"/", "timeline"}, {"t", "tree"}, {"d", "diff"},
-		{"1-3", "panel"}, {"r", "refresh"}, {"a", "add repo"}, {"A", "scan"},
+		{"c commit", "s stage"}, {"p push", "l pull"},
+		{"b branch", "/ log"}, {"t tree", "d diff"},
+		{"r refresh", "? help"}, {"a add", "A scan"},
 	}
-	for i, kv := range keys {
-		if i%2 == 0 && i > 0 {
-			b.WriteString("\n")
-		}
-		b.WriteString(fmt.Sprintf("  %s %s",
-			m.theme.KeyStyle.Render(kv.k),
-			m.theme.DimmedStyle.Render(kv.d)))
+	for _, pair := range keys {
+		b.WriteString(fmt.Sprintf("  %s  %s\n",
+			m.theme.KeyStyle.Render(pair.k),
+			m.theme.DimmedStyle.Render(pair.d)))
 	}
 
 	return b.String()
@@ -1715,84 +1705,87 @@ func (m Model) renderCenterPanel() string {
 func (m Model) renderCommitLog() string {
 	var b strings.Builder
 
+	// ── Branch header (like Glint's clean branch label) ──
 	activeBranch := m.store.Branches.Active()
-	b.WriteString(m.theme.BranchStyle.Render(" ⎇ " + activeBranch + " "))
+	b.WriteString(m.theme.BranchStyle.Render(" " + activeBranch + " "))
 	b.WriteString("\n")
 
 	if len(m.graphRows) == 0 {
-		b.WriteString("\n")
-		b.WriteString(m.theme.DimmedStyle.Render("  No commits yet"))
-		b.WriteString("\n")
-		b.WriteString(m.theme.DimmedStyle.Render("  r: refresh  /: timeline"))
-		b.WriteString("\n")
-	} else {
-		maxRows := m.layout.PanelHeight - 4
-		if maxRows > len(m.graphRows) {
-			maxRows = len(m.graphRows)
+		b.WriteString(m.theme.DimmedStyle.Render("  No commits yet  r:refresh"))
+		return b.String()
+	}
+
+	selIdx := m.store.Commits.SelectedIndex()
+	maxRows := m.layout.PanelHeight - 4
+	if maxRows > len(m.graphRows) {
+		maxRows = len(m.graphRows)
+	}
+
+	// Scroll to selected commit
+	start := 0
+	if selIdx >= maxRows {
+		start = countGraphCommitsUpTo(m.graphRows, selIdx)
+		if start > len(m.graphRows)-maxRows {
+			start = len(m.graphRows) - maxRows
+		}
+	}
+	end := start + maxRows
+	if end > len(m.graphRows) {
+		end = len(m.graphRows)
+	}
+
+	commitIdx := 0
+	for i := start; i < end; i++ {
+		row := m.graphRows[i]
+		isSelected := false
+
+		if row.IsCommit {
+			if commitIdx == selIdx {
+				isSelected = true
+			}
+			commitIdx++
 		}
 
-		// Determine scrolling offset based on selected commit index
-		selIdx := m.store.Commits.SelectedIndex()
-		start := 0
-		if selIdx >= maxRows {
-			start = countGraphCommitsUpTo(m.graphRows, selIdx) 
-			if start > len(m.graphRows)-maxRows {
-				start = len(m.graphRows) - maxRows
+		// Full-width row — selected row gets a subtle background
+		rowContent := ""
+		graphStr := m.renderGraphLine(row.Graph)
+		rowContent += graphStr
+
+		if row.IsCommit {
+			// Glint-style: bold message, muted hash/author/time
+			msg := row.Message
+			avail := m.layout.CenterWidth - len(row.Graph) - 3
+			if avail < 8 {
+				avail = 8
 			}
-		}
-		end := start + maxRows
-		if end > len(m.graphRows) {
-			end = len(m.graphRows)
-		}
-
-		commitIdx := 0
-		for i := start; i < end; i++ {
-			row := m.graphRows[i]
-			style := m.theme.BaseStyle
-
-			// Check if this commit is selected
-			if row.IsCommit {
-				if commitIdx == selIdx {
-					style = m.theme.SelectedStyle
-				}
-				commitIdx++
+			if len(msg) > avail {
+				msg = msg[:avail-1] + "…"
 			}
 
-			// Render graph prefix with colored columns
-			graphStr := m.renderGraphLine(row.Graph)
-			b.WriteString(graphStr)
+			// Show hash + message + author + relative time
+			hash := m.theme.DimmedStyle.Render(row.Hash)
+			author := m.theme.DimmedStyle.Render(row.Author)
+			timeStr := m.theme.DimmedStyle.Render(row.Time)
 
-			if row.IsCommit {
-				// Format: hash message author time
-				hash := m.theme.DimmedStyle.Render(row.Hash)
-				msg := row.Message
-				author := m.theme.DimmedStyle.Render(row.Author)
-				timeStr := m.theme.DimmedStyle.Render(row.Time)
-
-				avail := m.layout.CenterWidth - len(row.Graph) - 28
-				if avail < 5 {
-					avail = 5
-				}
-				if len(msg) > avail {
-					msg = msg[:avail-1] + "…"
-				}
-
-				line := fmt.Sprintf(" %s %s %s %s", hash, msg, author, timeStr)
-				b.WriteString(style.Render(line))
-			}
-
-			if i < end-1 {
-				b.WriteString("\n")
-			}
+			rowContent += fmt.Sprintf(" %s %s  %s  %s", hash, msg, author, timeStr)
 		}
 
-		// Scroll hint
-		totalCommits := countCommitsInGraph(m.graphRows)
-		if len(m.graphRows) > maxRows {
+		if isSelected {
+			b.WriteString(m.theme.SelectedStyle.Render(rowContent))
+		} else {
+			b.WriteString(m.theme.BaseStyle.Render(rowContent))
+		}
+
+		if i < end-1 {
 			b.WriteString("\n")
-			b.WriteString(m.theme.DimmedStyle.Render(
-				fmt.Sprintf("  ↓ %d commits  (/)", totalCommits)))
 		}
+	}
+
+	// Scroll hint
+	totalCommits := countCommitsInGraph(m.graphRows)
+	if len(m.graphRows) > maxRows {
+		b.WriteString(fmt.Sprintf("\n%s", m.theme.DimmedStyle.Render(
+			fmt.Sprintf("  ↓ %d commits  /:timeline", totalCommits))))
 	}
 
 	return b.String()
@@ -1855,68 +1848,67 @@ func (m Model) renderBranchList() string {
 	var b strings.Builder
 
 	activeBranch := m.store.Branches.Active()
-	b.WriteString(m.theme.BranchStyle.Render(" ⎇ " + activeBranch + " "))
+	b.WriteString(m.theme.BranchStyle.Render(" " + activeBranch + " "))
 	b.WriteString("\n")
 
 	branches := m.store.Branches.Branches()
 	if len(branches) == 0 {
-		return m.theme.DimmedStyle.Render("  No branches found")
-	}
-
-	// Separate local and remote
-	var local, remote []*types.Branch
-	for _, br := range branches {
-		if br.IsRemote {
-			remote = append(remote, br)
-		} else {
-			local = append(local, br)
-		}
-	}
-
-	maxBranches := m.layout.PanelHeight - 4
-	if maxBranches > len(branches) {
-		maxBranches = len(branches)
+		b.WriteString(m.theme.DimmedStyle.Render("  No branches"))
+		return b.String()
 	}
 
 	// Local branches
-	b.WriteString(m.theme.FocusedStyle.Render(" Local "))
+	b.WriteString(m.renderSectionHeader("Local"))
 	b.WriteString("\n")
-	for i, br := range local {
-		if i >= maxBranches/2 {
+	maxBranch := m.layout.PanelHeight - 4
+	count := 0
+	for _, br := range branches {
+		if br.IsRemote {
+			continue
+		}
+		if count >= maxBranch/2 {
 			break
 		}
 		style := m.theme.BaseStyle
-		prefix := "  "
+		mark := "  "
 		if br.IsActive {
 			style = m.theme.SelectedStyle
-			prefix = m.theme.BranchStyle.Render("●")
+			mark = m.theme.BranchStyle.Render("●")
 		}
 		ab := ""
 		if br.Ahead > 0 || br.Behind > 0 {
-			ab = m.theme.DimmedStyle.Render(fmt.Sprintf(" ↑%d↓%d", br.Ahead, br.Behind))
+			ab = m.theme.DimmedStyle.Render(fmt.Sprintf(" ↑%d ↓%d", br.Ahead, br.Behind))
 		}
-		b.WriteString(fmt.Sprintf(" %s %s%s", prefix, style.Render(br.Name), ab))
+		b.WriteString(fmt.Sprintf(" %s %s%s", mark, style.Render(br.Name), ab))
 		b.WriteString("\n")
-	}
-	if len(local) > maxBranches/2 {
-		b.WriteString(m.theme.DimmedStyle.Render(fmt.Sprintf("  ↓ %d more", len(local)-maxBranches/2)))
-		b.WriteString("\n")
+		count++
 	}
 
-	// Remote branches (if any)
-	if len(remote) > 0 && len(local) < maxBranches {
-		b.WriteString(m.theme.FocusedStyle.Render(" Remote "))
+	// Remote branches
+	remoteCount := 0
+	for _, br := range branches {
+		if !br.IsRemote {
+			continue
+		}
+		remoteCount++
+	}
+	if remoteCount > 0 && count < maxBranch {
+		b.WriteString(m.renderSectionHeader("Remote"))
 		b.WriteString("\n")
-		remMax := maxBranches - len(local) - 2
-		if remMax > len(remote) {
-			remMax = len(remote)
+		remMax := maxBranch - count - 2
+		if remMax > remoteCount {
+			remMax = remoteCount
 		}
-		for i := 0; i < remMax; i++ {
-			br := remote[i]
+		ri := 0
+		for _, br := range branches {
+			if !br.IsRemote {
+				continue
+			}
+			if ri >= remMax {
+				break
+			}
 			b.WriteString(fmt.Sprintf("  %s\n", m.theme.DimmedStyle.Render(br.Name)))
-		}
-		if len(remote) > remMax {
-			b.WriteString(m.theme.DimmedStyle.Render(fmt.Sprintf("  ↓ %d more", len(remote)-remMax)))
+			ri++
 		}
 	}
 
@@ -1924,93 +1916,46 @@ func (m Model) renderBranchList() string {
 }
 
 func (m Model) renderRightPanel() string {
-	// F2.6: File Tree Explorer view
 	if m.rightView == ViewFileTree {
 		return m.fileTree.Render(m.layout.RightWidth, m.layout.PanelHeight, m.theme)
 	}
 
 	var b strings.Builder
-	width := m.layout.RightWidth
+	availHeight := m.layout.PanelHeight - 2
 
-	// ── Changed Files (like Glint's file tree) ──
-	if len(m.fileChanges) > 0 {
+	// ── Changes (like Glint's file tree) ──
+	changes := m.fileChanges
+	maxChanges := (availHeight - 4) / 2
+	if maxChanges < 3 {
+		maxChanges = 3
+	}
+	if len(changes) == 0 {
+		maxChanges = 1
+	}
+
+	if len(changes) > 0 {
+		// Summary: count staged/unstaged
 		staged := 0
-		modified := 0
-		added := 0
-		deleted := 0
-		untracked := 0
-		for _, fc := range m.fileChanges {
+		for _, fc := range changes {
 			if fc.Staged {
 				staged++
 			}
-			switch fc.Status {
-			case types.FileStatusModified:
-				modified++
-			case types.FileStatusAdded:
-				added++
-			case types.FileStatusDeleted:
-				deleted++
-			case types.FileStatusUntracked:
-				untracked++
-			}
 		}
+		unstaged := len(changes) - staged
 
-		// Summary bar
 		summary := ""
 		if staged > 0 {
-			summary += m.theme.StagedStyle.Render(fmt.Sprintf(" +%d", staged))
+			summary += m.theme.StagedStyle.Render(fmt.Sprintf(" %d staged", staged))
 		}
-		if modified > 0 {
-			summary += m.theme.StatusModified.Render(fmt.Sprintf(" ~%d", modified))
+		if unstaged > 0 {
+			summary += m.theme.UnstagedStyle.Render(fmt.Sprintf(" %d unstaged", unstaged))
 		}
-		if added > 0 {
-			summary += m.theme.StatusAdded.Render(fmt.Sprintf(" +%d", added))
-		}
-		if deleted > 0 {
-			summary += m.theme.StatusDeleted.Render(fmt.Sprintf(" -%d", deleted))
-		}
-		if untracked > 0 {
-			summary += m.theme.StatusUntracked.Render(fmt.Sprintf(" ?%d", untracked))
-		}
-
-		b.WriteString(m.theme.FocusedStyle.Render(" Changes "))
+		b.WriteString(m.renderSectionHeader("Changes"))
 		b.WriteString(summary)
 		b.WriteString("\n")
-		b.WriteString(m.theme.DimmedStyle.Render(strings.Repeat("─", width)))
-		b.WriteString("\n")
 
-		// Show file list (like Glint's file tree)
-		maxFiles := (m.layout.PanelHeight - 6) / 2
-		if maxFiles < 4 {
-			maxFiles = 4
-		}
-		if maxFiles > len(m.fileChanges) {
-			maxFiles = len(m.fileChanges)
-		}
-
-		// Also show repo info
-		repoInfoLines := 4
-		if m.store.Repositories.Selected() != nil {
-			repo := m.store.Repositories.Selected()
-			if repo.Language != "" {
-				repoInfoLines++
-			}
-			if repo.Stars > 0 {
-				repoInfoLines++
-			}
-		}
-		maxFiles = m.layout.PanelHeight - 8 - repoInfoLines
-		if maxFiles < 3 {
-			maxFiles = 3
-		}
-		if maxFiles > len(m.fileChanges) {
-			maxFiles = len(m.fileChanges)
-		}
-
-		for i := 0; i < maxFiles; i++ {
-			fc := m.fileChanges[i]
-
-		// Status badge
+		for i := 0; i < maxChanges && i < len(changes); i++ {
+			fc := changes[i]
 			badge := " "
 			switch fc.Status {
 			case types.FileStatusModified:
@@ -2021,13 +1966,10 @@ func (m Model) renderRightPanel() string {
 				badge = m.theme.StatusDeleted.Render("D")
 			case types.FileStatusUntracked:
 				badge = m.theme.StatusUntracked.Render("?")
-			default:
-				badge = m.theme.DimmedStyle.Render(" ")
 			}
 
-			// Path display
 			path := fc.Path
-			avail := width - 10
+			avail := m.layout.RightWidth - 8
 			if avail < 5 {
 				avail = 5
 			}
@@ -2035,52 +1977,72 @@ func (m Model) renderRightPanel() string {
 				path = path[:avail-1] + "…"
 			}
 
-			style := m.theme.BaseStyle
+			style := m.theme.DimmedStyle
 			if fc.Staged {
 				style = m.theme.StagedStyle
 			}
-			b.WriteString(fmt.Sprintf(" %s %s", badge, style.Render(path)))
-			if i < maxFiles-1 {
+
+			line := ""
+			if i == m.selectedFile {
+				line = fmt.Sprintf(" %s %s %s", m.theme.FocusedStyle.Render("▸"), badge, style.Render(path))
+			} else {
+				line = fmt.Sprintf("   %s %s", badge, style.Render(path))
+			}
+			b.WriteString(line)
+			if i < maxChanges-1 && i < len(changes)-1 {
 				b.WriteString("\n")
 			}
 		}
-
-		if len(m.fileChanges) > maxFiles {
-			b.WriteString(fmt.Sprintf("\n%s", m.theme.DimmedStyle.Render(fmt.Sprintf("  ↓ %d more", len(m.fileChanges)-maxFiles))))
+		if len(changes) > maxChanges {
+			b.WriteString(fmt.Sprintf("\n%s", m.theme.DimmedStyle.Render(fmt.Sprintf("  ↓ %d more", len(changes)-maxChanges))))
 		}
-	}
-
-	// ── Repository Details ──
-	repo := m.store.Repositories.Selected()
-	if repo != nil {
-		b.WriteString("\n\n")
-		b.WriteString(m.theme.FocusedStyle.Render(" Repository "))
+	} else {
+		b.WriteString(m.renderSectionHeader("Changes"))
 		b.WriteString("\n")
-		b.WriteString(fmt.Sprintf("  %s\n", m.theme.BranchStyle.Render(repo.FullName)))
-		if repo.Language != "" {
-			b.WriteString(fmt.Sprintf("  %s\n", m.theme.DimmedStyle.Render("Lang: "+repo.Language)))
-		}
-		if repo.Stars > 0 || repo.Forks > 0 {
-			b.WriteString(fmt.Sprintf("  %s %s\n",
-				m.theme.KeyStyle.Render(fmt.Sprintf("★ %d", repo.Stars)),
-				m.theme.DimmedStyle.Render(fmt.Sprintf("⑂ %d", repo.Forks))))
-		}
+		b.WriteString(m.theme.DimmedStyle.Render("  No changes"))
 	}
 
-	// ── Auth ──
-	b.WriteString("\n")
-	b.WriteString(m.theme.FocusedStyle.Render(" Auth "))
-	b.WriteString("\n")
-	for _, p := range m.registry.All() {
-		dot := m.theme.DimmedStyle.Render("○")
-		if m.authManager.IsAuthenticated(p.Name()) {
-			dot = m.theme.StagedStyle.Render("●")
+	// ── Repository info (compact) ──
+	repo := m.store.Repositories.Selected()
+	usedLines := maxChanges + 2
+	if repo != nil {
+		b.WriteString("\n")
+		b.WriteString(m.renderSectionHeader("Repository"))
+		b.WriteString("\n")
+		b.WriteString(fmt.Sprintf("  %s", m.theme.BaseStyle.Render(repo.FullName)))
+		if repo.Language != "" || repo.Stars > 0 || repo.Forks > 0 {
+			info := ""
+			if repo.Language != "" {
+				info += m.theme.DimmedStyle.Render(" " + repo.Language)
+			}
+			if repo.Stars > 0 {
+				info += m.theme.KeyStyle.Render(fmt.Sprintf(" ★ %d", repo.Stars))
+			}
+			if repo.Forks > 0 {
+				info += m.theme.DimmedStyle.Render(fmt.Sprintf(" ⑂ %d", repo.Forks))
+			}
+			b.WriteString(info)
 		}
-		active := ""
-		if p.Name() == m.store.Settings.ActiveProvider() {
-			active = m.theme.FocusedStyle.Render(" ←")
+		b.WriteString("\n")
+		usedLines += 4
+	}
+
+	// ── Auth (compact) ──
+	if usedLines < availHeight {
+		b.WriteString("\n")
+		b.WriteString(m.renderSectionHeader("Auth"))
+		b.WriteString("\n")
+		for _, p := range m.registry.All() {
+			dot := m.theme.DimmedStyle.Render("○")
+			if m.authManager.IsAuthenticated(p.Name()) {
+				dot = m.theme.StagedStyle.Render("●")
+			}
+			active := ""
+			if p.Name() == m.store.Settings.ActiveProvider() {
+				active = m.theme.FocusedStyle.Render(" ←")
+			}
+			b.WriteString(fmt.Sprintf("  %s %s%s\n", dot, p.DisplayName(), active))
 		}
-		b.WriteString(fmt.Sprintf("  %s %s%s\n", dot, p.DisplayName(), active))
 	}
 
 	return b.String()
@@ -2091,14 +2053,12 @@ func (m Model) renderRightPanel() string {
 // ---------------------------------------------------------------------------
 
 func (m Model) renderStatusBar() string {
-	provider := m.store.Settings.ActiveProvider()
 	branch := m.store.Branches.Active()
+	provider := m.store.Settings.ActiveProvider()
 
-	// Left section: branch + provider + changes
-	left := fmt.Sprintf("  %s ", m.theme.BranchStyle.Render("⎇ "+branch))
-	left += m.theme.DimmedStyle.Render(provider)
+	// Left: branch | provider | changes
+	left := fmt.Sprintf(" %s  %s", m.theme.BranchStyle.Render(branch), m.theme.DimmedStyle.Render(provider))
 
-	// Changes summary
 	if len(m.fileChanges) > 0 {
 		staged := 0
 		for _, fc := range m.fileChanges {
@@ -2106,28 +2066,27 @@ func (m Model) renderStatusBar() string {
 				staged++
 			}
 		}
-		unstaged := len(m.fileChanges) - staged
 		if staged > 0 {
 			left += m.theme.StagedStyle.Render(fmt.Sprintf(" +%d", staged))
 		}
-		if unstaged > 0 {
-			left += m.theme.UnstagedStyle.Render(fmt.Sprintf(" ~%d", unstaged))
+		if len(m.fileChanges)-staged > 0 {
+			left += m.theme.UnstagedStyle.Render(fmt.Sprintf(" ~%d", len(m.fileChanges)-staged))
 		}
 	}
 
 	// Spinner
 	if m.spinnerActive {
-		left += m.theme.WarningText.Render(" " + m.spinnerChars[m.spinnerFrame] + " " + m.spinnerOp)
+		left += m.theme.FocusedStyle.Render(" " + m.spinnerChars[m.spinnerFrame] + " " + m.spinnerOp)
 	}
 
-	// Right section: time + auth
+	// Right: auth + time
 	right := ""
 	for _, p := range m.registry.All() {
 		if m.authManager.IsAuthenticated(p.Name()) {
-			right += m.theme.StagedStyle.Render(" ✓" + p.Name())
+			right += m.theme.StagedStyle.Render(" ✓")
 		}
 	}
-	right += " " + time.Now().Format("15:04") + " "
+	right += " " + time.Now().Format("15:04")
 
 	spaces := m.width - len(left) - len(right)
 	if spaces < 1 {
@@ -2143,25 +2102,21 @@ func (m Model) renderCommandBar() string {
 	switch {
 	case m.showStaging:
 		cmds = []cmd{
-			{"↑↓", "nav"}, {"s", "stage"}, {"↵", "commit"},
-			{"p", "push"}, {"d", "diff"}, {"esc", "back"},
+			{"s", "stage"}, {"↵", "commit"}, {"d", "diff"},
+			{"p", "push"}, {"esc", "back"},
 		}
-	case m.showTimeline:
+	case m.showTimeline, m.showHistory, m.showHelp:
 		cmds = []cmd{{"↑↓", "nav"}, {"esc", "close"}}
-	case m.showHistory, m.showHelp:
-		cmds = []cmd{{"esc", "close"}}
 	case m.showAuth, m.showRemotes, m.showRepoAdd:
-		cmds = []cmd{{"↵", "confirm"}, {"esc", "cancel"}}
+		cmds = []cmd{{"↵", "ok"}, {"esc", "cancel"}}
 	case m.mode == ModeCommitMessage:
 		cmds = []cmd{{"↵", "commit"}, {"esc", "cancel"}}
 	default:
-		// Compact global commands
 		cmds = []cmd{
 			{"c", "commit"}, {"p", "push"}, {"l", "pull"},
 			{"d", "diff"}, {"b", "branch"}, {"t", "tree"},
-			{"/", "log"}, {"C", "branch"}, {"m", "merge"},
-			{"y", "cherry"}, {"V", "revert"}, {"r", "refresh"},
-			{"?", "help"},
+			{"/", "log"}, {"y", "cherry"}, {"V", "revert"},
+			{"r", "refresh"}, {"?", "help"},
 		}
 	}
 
@@ -2170,7 +2125,7 @@ func (m Model) renderCommandBar() string {
 		if i > 0 {
 			sb.WriteString(" ")
 		}
-		sb.WriteString(m.theme.KeyStyle.Render(" " + c.key + " "))
+		sb.WriteString(m.theme.DimmedStyle.Render(" " + c.key + " "))
 		sb.WriteString(m.theme.DimmedStyle.Render(c.desc))
 	}
 	cmdStr := sb.String()
@@ -2179,11 +2134,7 @@ func (m Model) renderCommandBar() string {
 	if spaces < 0 {
 		spaces = 0
 	}
-	barStyle := lipgloss.NewStyle().
-		Foreground(m.theme.Muted).
-		Background(m.theme.Background).
-		Padding(0, 2)
-	return barStyle.Render(cmdStr + strings.Repeat(" ", spaces))
+	return m.theme.StatusBarStyle.Render(cmdStr + strings.Repeat(" ", spaces))
 }
 
 // ---------------------------------------------------------------------------
@@ -2201,7 +2152,7 @@ func (m Model) renderDiffViewerOverlay() string {
 	}
 
 	title := m.theme.OverlayTitle.Render(" Diff: " + m.diffFileName + " ")
-	help := m.theme.DimmedStyle.Render(" ↑↓: scroll  pgup/pgdn: página  esc: fechar ")
+	help := m.theme.DimmedStyle.Render(" ↑↓ scroll  pgup/pgdn page  esc close ")
 
 	var inner strings.Builder
 	maxLines := ovHeight - 4
@@ -2288,7 +2239,7 @@ func (m Model) renderStagingOverlay() string {
 	title := m.theme.OverlayTitle.Render(" Stage Changes ")
 	top := lipgloss.JoinHorizontal(lipgloss.Top,
 		title,
-		m.theme.DimmedStyle.Render(" ↑↓:nav  s:stage  ↵:commit  d:diff  esc:back "),
+		m.theme.DimmedStyle.Render(" ↑↓ nav  s stage  ↵ commit  d diff  esc back "),
 	)
 
 	var inner strings.Builder
@@ -2382,8 +2333,8 @@ func (m Model) renderTimelineOverlay() string {
 		ovHeight = 5
 	}
 
-	title := m.theme.OverlayTitle.Render(" Timeline de Commits ")
-	help := m.theme.DimmedStyle.Render(" ↑↓: navegar  esc: fechar ")
+	title := m.theme.OverlayTitle.Render(" Commit Timeline ")
+	help := m.theme.DimmedStyle.Render(" ↑↓ nav  esc close ")
 
 	var inner strings.Builder
 	if len(m.timelineCommits) == 0 {
@@ -2442,7 +2393,7 @@ func (m Model) renderRemotesOverlay() string {
 	ovWidth := 60
 
 	title := m.theme.OverlayTitle.Render(" Remotes ")
-	help := m.theme.DimmedStyle.Render(" a: adicionar  esc: fechar ")
+	help := m.theme.DimmedStyle.Render(" a add  esc close ")
 
 	var inner strings.Builder
 	if len(m.remoteList) == 0 {
@@ -2476,8 +2427,8 @@ func (m Model) renderRemotesOverlay() string {
 func (m Model) renderAuthOverlay() string {
 	ovWidth := 55
 
-	title := m.theme.OverlayTitle.Render(" Autenticação ")
-	help := m.theme.DimmedStyle.Render(" ↵: confirmar  esc: fechar ")
+	title := m.theme.OverlayTitle.Render(" Authentication ")
+	help := m.theme.DimmedStyle.Render(" ↵ confirm  esc close ")
 
 	var inner strings.Builder
 	for _, p := range m.registry.All() {

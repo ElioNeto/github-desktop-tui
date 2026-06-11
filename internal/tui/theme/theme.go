@@ -9,6 +9,7 @@ import (
 )
 
 // Theme defines the color palette and derived styles for the TUI.
+// Designed to match Glint's clean Material Design aesthetic.
 type Theme struct {
 	// Core colors
 	Primary    lipgloss.Color
@@ -22,54 +23,51 @@ type Theme struct {
 	Info       lipgloss.Color
 	Accent     lipgloss.Color
 
-	// Base styles
-	BaseStyle      lipgloss.Style
-	FocusedStyle   lipgloss.Style
-	TitleStyle     lipgloss.Style
-	StatusBarStyle lipgloss.Style
-	SelectedStyle  lipgloss.Style
-	DimmedStyle    lipgloss.Style
+	// Base
+	BaseStyle    lipgloss.Style
+	DimmedStyle  lipgloss.Style
+	MutedStyle   lipgloss.Style
+	SelectedStyle lipgloss.Style
+	FocusedStyle lipgloss.Style
 
-	// Panel styles
-	PanelStyle       lipgloss.Style
-	ActivePanelStyle lipgloss.Style
+	// Panels (no borders — Glint style)
+	PanelSeparator lipgloss.Style
+	ActivePanelMarker lipgloss.Style
 
-	// Panel title bars
-	PanelTitleStyle           lipgloss.Style
-	ActivePanelTitleStyle     lipgloss.Style
+	// Source control
+	BranchStyle lipgloss.Style
+	StagedStyle lipgloss.Style
+	UnstagedStyle lipgloss.Style
 
-	// Diff styles
+	// Status badges
+	StatusAdded    lipgloss.Style
+	StatusDeleted  lipgloss.Style
+	StatusModified lipgloss.Style
+	StatusUntracked lipgloss.Style
+	StatusRenamed  lipgloss.Style
+
+	// Diff
 	DiffAdded   lipgloss.Style
 	DiffDeleted lipgloss.Style
 	DiffHeader  lipgloss.Style
 
-	// Source control styles
-	FileTreeStyle    lipgloss.Style
-	BranchStyle      lipgloss.Style
-	TagStyle         lipgloss.Style
-	StagedStyle      lipgloss.Style
-	UnstagedStyle    lipgloss.Style
+	// Status bar
+	StatusBarStyle lipgloss.Style
 
-	// Status indicators
-	StatusAdded   lipgloss.Style
-	StatusDeleted lipgloss.Style
-	StatusModified lipgloss.Style
-	StatusUntracked lipgloss.Style
-	StatusRenamed lipgloss.Style
-
-	// Overlay styles
+	// Overlays
 	OverlayBorder lipgloss.Style
 	OverlayTitle  lipgloss.Style
 
-	// Accent colors for status
-	ScrollIndicator lipgloss.Style
-	KeyStyle        lipgloss.Style
-
-	// Notification styles
+	// Notifications
 	SuccessText lipgloss.Style
 	WarningText lipgloss.Style
 	ErrorText   lipgloss.Style
 	InfoText    lipgloss.Style
+
+	// Misc
+	ScrollIndicator lipgloss.Style
+	KeyStyle        lipgloss.Style
+	GraphStyle      lipgloss.Style
 }
 
 // BuiltinTheme returns one of the built-in themes by name.
@@ -77,24 +75,22 @@ func BuiltinTheme(name string) *Theme {
 	switch name {
 	case "light":
 		return Light()
-	case "dark":
-		return Default()
 	default:
 		return Default()
 	}
 }
 
-// Light returns the light theme (Glint-inspired clean style).
+// Light returns the light theme — Glint's clean white + orange aesthetic.
 func Light() *Theme {
 	t := &Theme{
 		Background: lipgloss.Color("#ffffff"),
-		Surface:    lipgloss.Color("#f5f5f5"),
-		Primary:    lipgloss.Color("#ef6c00"), // Glint orange
-		Accent:     lipgloss.Color("#ef6c00"), // Glint orange
+		Surface:    lipgloss.Color("#f8f9fa"),
+		Primary:    lipgloss.Color("#ef6c00"), // Glint signature orange
+		Accent:     lipgloss.Color("#ef6c00"),
 		Text:       lipgloss.Color("#1a1a2e"),
-		Muted:      lipgloss.Color("#9399b2"),
+		Muted:      lipgloss.Color("#8e8ea0"),
 		Success:    lipgloss.Color("#2e7d32"),
-		Warning:    lipgloss.Color("#f57f17"),
+		Warning:    lipgloss.Color("#e65100"),
 		Error:      lipgloss.Color("#d32f2f"),
 		Info:       lipgloss.Color("#1565c0"),
 	}
@@ -102,27 +98,28 @@ func Light() *Theme {
 	return t
 }
 
-// Default returns the default theme with Glint-inspired colors.
+// Default is the dark variant — still Glint-inspired but for dark terminals.
 func Default() *Theme {
 	t := &Theme{
-		Background: lipgloss.Color("#1e1e2e"),
-		Surface:    lipgloss.Color("#2a2a3e"),
-		Primary:    lipgloss.Color("#ef6c00"), // Glint orange
-		Accent:     lipgloss.Color("#ef6c00"), // Glint orange
-		Text:       lipgloss.Color("#cdd6f4"),
-		Muted:      lipgloss.Color("#6c7086"),
-		Success:    lipgloss.Color("#a6e3a1"),
-		Warning:    lipgloss.Color("#f9e2af"),
-		Error:      lipgloss.Color("#f38ba8"),
-		Info:       lipgloss.Color("#89b4fa"),
+		Background: lipgloss.Color("#1a1a2e"),
+		Surface:    lipgloss.Color("#22223a"),
+		Primary:    lipgloss.Color("#ff8a3d"), // Warmer orange for dark bg
+		Accent:     lipgloss.Color("#ff8a3d"),
+		Text:       lipgloss.Color("#e2e2e8"),
+		Muted:      lipgloss.Color("#6c6c8a"),
+		Success:    lipgloss.Color("#66bb6a"),
+		Warning:    lipgloss.Color("#ffa726"),
+		Error:      lipgloss.Color("#ef5350"),
+		Info:       lipgloss.Color("#42a5f5"),
 	}
 	t.initStyles()
 	return t
 }
 
 // initStyles creates all lipgloss styles derived from theme colors.
+// Glint-inspired: clean, minimal, no borders, lots of whitespace.
 func (t *Theme) initStyles() {
-	// --- Base ---
+	// ── Base ──
 	t.BaseStyle = lipgloss.NewStyle().
 		Foreground(t.Text).
 		Background(t.Background)
@@ -131,83 +128,34 @@ func (t *Theme) initStyles() {
 		Foreground(t.Muted).
 		Background(t.Background)
 
+	t.MutedStyle = lipgloss.NewStyle().
+		Foreground(t.Muted).
+		Background(t.Background)
+
+	t.SelectedStyle = lipgloss.NewStyle().
+		Foreground(t.Text).
+		Background(t.Surface).
+		Padding(0, 1)
+
 	t.FocusedStyle = lipgloss.NewStyle().
 		Foreground(t.Accent).
 		Bold(true)
 
-	t.SelectedStyle = lipgloss.NewStyle().
-		Foreground(t.Text).
-		Background(lipgloss.Color("#5a3a3a"))
+	// ── Panel separator (thin vertical line between panels, Glint-style) ──
+	t.PanelSeparator = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(t.Muted)).
+		Background(t.Background).
+		Padding(0, 0)
 
-	// --- Titles ---
-	t.TitleStyle = lipgloss.NewStyle().
-		Foreground(t.Primary).
-		Bold(true).
-		Padding(0, 1)
-
-	t.PanelTitleStyle = lipgloss.NewStyle().
+	t.ActivePanelMarker = lipgloss.NewStyle().
 		Foreground(t.Accent).
 		Background(t.Background).
-		Bold(true).
-		Padding(0, 1).
-		MarginRight(1)
-
-	t.ActivePanelTitleStyle = lipgloss.NewStyle().
-		Foreground(t.Background).
-		Background(t.Accent).
-		Bold(true).
 		Padding(0, 1)
 
-	// --- Panels ---
-	t.PanelStyle = lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(t.Muted).
-		Background(t.Background).
-		Foreground(t.Text).
-		Padding(0, 1)
-
-	t.ActivePanelStyle = lipgloss.NewStyle().
-		Border(lipgloss.DoubleBorder()).
-		BorderForeground(t.Accent).
-		Background(t.Background).
-		Foreground(t.Text).
-		Padding(0, 1)
-
-	// --- Status bar ---
-	t.StatusBarStyle = lipgloss.NewStyle().
-		Foreground(t.Background).
-		Background(t.Muted).
-		Padding(0, 2)
-
-	// --- Diff ---
-	t.DiffAdded = lipgloss.NewStyle().
-		Foreground(t.Success).
-		Background(t.Background).
-		Padding(0, 1)
-
-	t.DiffDeleted = lipgloss.NewStyle().
-		Foreground(t.Error).
-		Background(t.Background).
-		Padding(0, 1)
-
-	t.DiffHeader = lipgloss.NewStyle().
-		Foreground(t.Info).
-		Bold(true)
-
-	// --- Source control ---
-	t.FileTreeStyle = lipgloss.NewStyle().
-		Foreground(t.Text).
-		Background(t.Background).
-		PaddingLeft(2)
-
+	// ── Source control ──
 	t.BranchStyle = lipgloss.NewStyle().
-		Foreground(t.Info).
-		Bold(true).
-		Padding(0, 1)
-
-	t.TagStyle = lipgloss.NewStyle().
-		Foreground(t.Warning).
-		Padding(0, 1)
+		Foreground(t.Accent).
+		Bold(true)
 
 	t.StagedStyle = lipgloss.NewStyle().
 		Foreground(t.Success).
@@ -216,7 +164,7 @@ func (t *Theme) initStyles() {
 	t.UnstagedStyle = lipgloss.NewStyle().
 		Foreground(t.Muted)
 
-	// --- Status indicators ---
+	// ── Status badges (A/M/D/?) ──
 	t.StatusAdded = lipgloss.NewStyle().
 		Foreground(t.Success).
 		Bold(true)
@@ -236,12 +184,31 @@ func (t *Theme) initStyles() {
 		Foreground(t.Info).
 		Bold(true)
 
-	// --- Overlays ---
+	// ── Diff ──
+	t.DiffAdded = lipgloss.NewStyle().
+		Foreground(t.Success).
+		Background(t.Background)
+
+	t.DiffDeleted = lipgloss.NewStyle().
+		Foreground(t.Error).
+		Background(t.Background)
+
+	t.DiffHeader = lipgloss.NewStyle().
+		Foreground(t.Info).
+		Bold(true)
+
+	// ── Status bar (thin, no borders, Glint minimal) ──
+	t.StatusBarStyle = lipgloss.NewStyle().
+		Foreground(t.Muted).
+		Background(t.Background).
+		Padding(0, 2)
+
+	// ── Overlays ──
 	t.OverlayBorder = lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(t.Accent).
+		BorderForeground(t.Muted).
 		Padding(1, 2).
-		Background(lipgloss.Color("#2a1a1a"))
+		Background(t.Background)
 
 	t.OverlayTitle = lipgloss.NewStyle().
 		Foreground(t.Background).
@@ -249,35 +216,35 @@ func (t *Theme) initStyles() {
 		Bold(true).
 		Padding(0, 2)
 
-	// --- Misc ---
+	// ── Misc ──
 	t.ScrollIndicator = lipgloss.NewStyle().
 		Foreground(t.Muted).
-		Background(t.Surface)
+		Background(t.Background)
 
 	t.KeyStyle = lipgloss.NewStyle().
-		Foreground(t.Warning).
+		Foreground(t.Accent).
 		Bold(true)
 
-	// --- Notifications ---
+	t.GraphStyle = lipgloss.NewStyle().
+		Foreground(t.Muted).
+		Background(t.Background)
+
+	// ── Notifications ──
 	t.SuccessText = lipgloss.NewStyle().
 		Foreground(t.Success).
-		Bold(true).
-		Padding(0, 1)
+		Bold(true)
 
 	t.WarningText = lipgloss.NewStyle().
 		Foreground(t.Warning).
-		Bold(true).
-		Padding(0, 1)
+		Bold(true)
 
 	t.ErrorText = lipgloss.NewStyle().
 		Foreground(t.Error).
-		Bold(true).
-		Padding(0, 1)
+		Bold(true)
 
 	t.InfoText = lipgloss.NewStyle().
 		Foreground(t.Info).
-		Bold(true).
-		Padding(0, 1)
+		Bold(true)
 }
 
 // Load reads a theme from a JSON file and merges it over the defaults.

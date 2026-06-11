@@ -36,6 +36,7 @@ const (
 )
 
 // Layout manages the size and position of the three main panels.
+// Glint-style: no borders, thin separators, full-width content.
 type Layout struct {
 	Width  int
 	Height int
@@ -44,47 +45,52 @@ type Layout struct {
 	CenterWidth int
 	RightWidth  int
 
-	StatusBarHeight int
-	PanelHeight     int
-
-	// Gap between panels (for borders)
-	PanelGap int
+	SeparatorWidth int // thin gap between panels (1 char)
+	StatusBarLines int  // lines for status + command bar
+	PanelHeight    int
 }
 
 // LayoutRatios defines the default width ratios for the three panels.
-var LayoutRatios = [3]float64{0.22, 0.48, 0.30}
+var LayoutRatios = [3]float64{0.22, 0.50, 0.28}
 
 // MinWidths defines the minimum width for each panel.
-var MinWidths = [3]int{28, 45, 30}
+var MinWidths = [3]int{28, 50, 30}
 
 // CalculateLayout computes panel dimensions from total terminal size.
+// Glint-style: panels are separated by a 1-char vertical line.
 func CalculateLayout(width, height int) Layout {
 	l := Layout{
-		Width:           width,
-		Height:          height,
-		StatusBarHeight: 2,
-		PanelGap:        0, // No gap - borders take space from the panel content
+		Width:          width,
+		Height:         height,
+		SeparatorWidth: 1, // thin vertical line between panels
+		StatusBarLines: 2, // status bar + command bar
 	}
 
-	// Reserve space for status bar
-	l.PanelHeight = height - l.StatusBarHeight
+	// Reserve space for status + command bars
+	l.PanelHeight = height - l.StatusBarLines
 	if l.PanelHeight < 1 {
 		l.PanelHeight = 1
 	}
 
-	// Calculate panel widths based on ratios, respecting minimums
+	// Calculate available width for panels (accounting for separators)
+	totalSeparators := (NumPanels - 1) * l.SeparatorWidth
+	availWidth := width - totalSeparators
+	if availWidth < 60 {
+		availWidth = 60
+	}
+
+	// Calculate proportional widths
 	totalRatio := 0.0
 	for _, r := range LayoutRatios {
 		totalRatio += r
 	}
 
-	// First pass: calculate proportional widths
 	rawWidths := [3]int{}
 	for i, ratio := range LayoutRatios {
-		rawWidths[i] = int(float64(width) * ratio / totalRatio)
+		rawWidths[i] = int(float64(availWidth) * ratio / totalRatio)
 	}
 
-	// Second pass: enforce minimum widths
+	// Enforce minimum widths
 	for i, min := range MinWidths {
 		if rawWidths[i] < min {
 			shortfall := min - rawWidths[i]
@@ -114,6 +120,7 @@ func CalculateLayout(width, height int) Layout {
 }
 
 // PanelBounds returns the x, y, width, height for a given panel.
+// x accounts for separators.
 func (l Layout) PanelBounds(panel PanelID) (x, y, width, height int) {
 	y = 0
 	height = l.PanelHeight
@@ -123,12 +130,24 @@ func (l Layout) PanelBounds(panel PanelID) (x, y, width, height int) {
 		x = 0
 		width = l.LeftWidth
 	case PanelCenter:
-		x = l.LeftWidth
+		x = l.LeftWidth + l.SeparatorWidth
 		width = l.CenterWidth
 	case PanelRight:
-		x = l.LeftWidth + l.CenterWidth
+		x = l.LeftWidth + l.SeparatorWidth + l.CenterWidth + l.SeparatorWidth
 		width = l.RightWidth
 	}
 
 	return x, y, width, height
+}
+
+// SeparatorX returns the x position of the separator before a panel.
+func (l Layout) SeparatorX(panel PanelID) int {
+	switch panel {
+	case PanelCenter:
+		return l.LeftWidth
+	case PanelRight:
+		return l.LeftWidth + l.SeparatorWidth + l.CenterWidth
+	default:
+		return 0
+	}
 }

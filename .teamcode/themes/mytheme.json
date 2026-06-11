@@ -1,11 +1,11 @@
 {
-  "bg": "#1e1e2e",
-  "surface": "#2a2a3e",
-  "accent": "#ef6c00",
-  "text": "#cdd6f4",
-  "muted": "#6c7086",
-  "success": "#a6e3a1",
-  "warning": "#f9e2af",
-  "error": "#f38ba8",
-  "info": "#89b4fa"
+  "bg": "#1a1a2e",
+  "surface": "#22223a",
+  "accent": "#ff8a3d",
+  "text": "#e2e2e8",
+  "muted": "#6c6c8a",
+  "success": "#66bb6a",
+  "warning": "#ffa726",
+  "error": "#ef5350",
+  "info": "#42a5f5"
 }
