@@ -188,7 +188,13 @@ func New(opts Options) *Model {
 
 // Init initializes the model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(tea.EnterAltScreen, m.waitForSize)
+	return tea.Batch(
+		tea.EnterAltScreen,
+		m.waitForSize,
+		m.loadCommits,
+		m.loadGitStatus(),
+		m.loadBranches(),
+	)
 }
 
 func (m Model) waitForSize() tea.Msg {
@@ -372,6 +378,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case GitBranchesErrorMsg:
+		m.setNotification("error", msg.Err.Error())
+		return m, nil
+
+	case GitCommitsLoadedMsg:
+		m.store.Commits.SetCommits(msg.Commits)
+		return m, nil
+
+	case GitCommitsErrorMsg:
 		m.setNotification("error", msg.Err.Error())
 		return m, nil
 
@@ -888,7 +902,15 @@ func (m Model) handleDiff() (tea.Model, tea.Cmd) {
 // ---------------------------------------------------------------------------
 
 func (m Model) refreshAll() tea.Cmd {
-	return tea.Batch(m.loadGitStatus(), m.loadBranches(), m.loadTimeline(), m.loadRemotes())
+	return tea.Batch(m.loadGitStatus(), m.loadCommits, m.loadBranches(), m.loadTimeline(), m.loadRemotes())
+}
+
+func (m Model) loadCommits() tea.Msg {
+	commits, err := m.gitOps.Log(context.TODO(), &gitlocal.LogOptions{Limit: 50})
+	if err != nil {
+		return GitCommitsErrorMsg{Err: err}
+	}
+	return GitCommitsLoadedMsg{Commits: commits}
 }
 
 func (m Model) loadGitStatus() tea.Cmd {
@@ -1227,9 +1249,9 @@ func (m Model) renderCommitLog() string {
 	commits := m.store.Commits.Commits()
 	if len(commits) == 0 {
 		b.WriteString("\n")
-		b.WriteString(m.theme.DimmedStyle.Render("  Nenhum commit encontrado"))
+		b.WriteString(m.theme.DimmedStyle.Render("  Carregando commits..."))
 		b.WriteString("\n")
-		b.WriteString(m.theme.DimmedStyle.Render("  r: atualizar  /: timeline"))
+		b.WriteString(m.theme.DimmedStyle.Render("  r: atualizar  /: timeline completa"))
 		b.WriteString("\n")
 	} else {
 		b.WriteString("\n")
@@ -1245,12 +1267,16 @@ func (m Model) renderCommitLog() string {
 			if i == sel {
 				style = m.theme.SelectedStyle
 				cursor = "●"
+			} else if i == len(commits)-1 || i == maxCommits-1 {
+				cursor = "○"
+			} else {
+				cursor = "│"
 			}
 
 			timeStr := m.theme.DimmedStyle.Render(c.Timestamp.Format("02 Jan 15:04"))
 			hash := m.theme.DimmedStyle.Render(c.ShortHash)
 			msgHead := c.MessageHead
-			available := m.layout.CenterWidth - 35
+			available := m.layout.CenterWidth - 38
 			if available < 10 {
 				available = 10
 			}
@@ -1262,11 +1288,16 @@ func (m Model) renderCommitLog() string {
 			b.WriteString(style.Render(line))
 			if i < maxCommits-1 {
 				b.WriteString("\n")
+				// Graph continuation line (connecting commits)
+				if i < len(commits)-1 {
+					b.WriteString(m.theme.DimmedStyle.Render("  │"))
+				}
 			}
 		}
 		// Scroll hint
 		if len(commits) > maxCommits {
-			b.WriteString("\n" + m.theme.DimmedStyle.Render(fmt.Sprintf("  ↓ +%d commits", len(commits)-maxCommits)))
+			b.WriteString("\n" + m.theme.DimmedStyle.Render(
+				fmt.Sprintf("  ↓ +%d commits  (/)", len(commits)-maxCommits)))
 		}
 	}
 

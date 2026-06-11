@@ -82,6 +82,14 @@ type GitLogErrorMsg struct {
 	Err error
 }
 
+type GitCommitsLoadedMsg struct {
+	Commits []*types.Commit
+}
+
+type GitCommitsErrorMsg struct {
+	Err error
+}
+
 type GitBranchesLoadedMsg struct {
 	Branches []*types.Branch
 }
