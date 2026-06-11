@@ -16,6 +16,7 @@ func Default() *Config {
 
 	return &Config{
 		ActiveProvider: "github",
+		ThemeName:      "dark",
 		ThemeFile:      filepath.Join(appDir, "theme.json"),
 		DataDir:        filepath.Join(appDir, "data"),
 		Providers: map[string]ProviderConfig{

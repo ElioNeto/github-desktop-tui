@@ -97,6 +97,7 @@
   },
   "permission": {
     "edit": "allow",
+    "question": "deny",
     "bash": {
       "git *": "allow",
       "ls *": "allow",

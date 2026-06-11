@@ -26,6 +26,23 @@ type KeyMap struct {
 	PageDown       key.Binding
 	Home           key.Binding
 	End            key.Binding
+
+	// F1.3 - Panel navigation
+	Panel1 key.Binding
+	Panel2 key.Binding
+	Panel3 key.Binding
+
+	// F1.1 - Notification history
+	History key.Binding
+
+	// F1.4 - Theme toggle
+	ThemeToggle key.Binding
+
+	// F1.2 - Repo management
+	RepoAdd    key.Binding
+	RepoScan   key.Binding
+	RepoRemove key.Binding
+	RepoFav    key.Binding
 }
 
 // DefaultKeyMap returns the default keybinding set.
@@ -118,6 +135,50 @@ func DefaultKeyMap() KeyMap {
 		End: key.NewBinding(
 			key.WithKeys("end"),
 			key.WithHelp("end", "fim"),
+		),
+
+		// Panel navigation (F1.3)
+		Panel1: key.NewBinding(
+			key.WithKeys("1"),
+			key.WithHelp("1", "painel esquerdo"),
+		),
+		Panel2: key.NewBinding(
+			key.WithKeys("2"),
+			key.WithHelp("2", "painel central"),
+		),
+		Panel3: key.NewBinding(
+			key.WithKeys("3"),
+			key.WithHelp("3", "painel direito"),
+		),
+
+		// Notification history (F1.1)
+		History: key.NewBinding(
+			key.WithKeys("N"),
+			key.WithHelp("N", "histórico de notificações"),
+		),
+
+		// Theme toggle (F1.4)
+		ThemeToggle: key.NewBinding(
+			key.WithKeys("T"),
+			key.WithHelp("T", "alternar tema"),
+		),
+
+		// Repo management (F1.2)
+		RepoAdd: key.NewBinding(
+			key.WithKeys("a"),
+			key.WithHelp("a", "adicionar repositório"),
+		),
+		RepoScan: key.NewBinding(
+			key.WithKeys("A"),
+			key.WithHelp("A", "scanear diretório"),
+		),
+		RepoRemove: key.NewBinding(
+			key.WithKeys("x"),
+			key.WithHelp("x", "remover repositório"),
+		),
+		RepoFav: key.NewBinding(
+			key.WithKeys("f"),
+			key.WithHelp("f", "favoritar"),
 		),
 	}
 }

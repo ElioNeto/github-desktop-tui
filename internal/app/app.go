@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -21,16 +22,53 @@ import (
 
 // Run initializes and starts the TUI application.
 func Run() error {
+	// Parse theme flag
+	themeName := ""
+	args := os.Args[1:]
+	for i, arg := range args {
+		if arg == "--theme" && i+1 < len(args) {
+			themeName = args[i+1]
+			// Remove --theme and its value from args
+			args = append(args[:i], args[i+2:]...)
+			break
+		}
+	}
+
+	// Get repo path from remaining args
+	repoPath := "."
+	if len(args) > 0 && args[0] != "" {
+		repoPath = args[0]
+	}
+
 	// --- Configuração ---
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("carregar config: %w", err)
 	}
 
+	// Override theme from flag
+	if themeName != "" {
+		cfg.ThemeName = themeName
+	}
+
 	// --- Tema ---
-	th, err := theme.Load(cfg.ThemeFile)
-	if err != nil {
+	appDir, _ := os.UserConfigDir()
+	appDir = filepath.Join(appDir, "github-desktop-tui")
+	themeDir := filepath.Join(appDir, "themes")
+
+	var th *theme.Theme
+	if cfg.ThemeName != "" {
+		th = theme.BuiltinTheme(cfg.ThemeName)
+		// Try loading from theme dir
+		themePath := filepath.Join(themeDir, cfg.ThemeName+".json")
+		if loaded, err := theme.Load(themePath); err == nil {
+			th = loaded
+		}
+	} else {
 		th = theme.Default()
+		if loaded, err := theme.Load(cfg.ThemeFile); err == nil {
+			th = loaded
+		}
 	}
 
 	// --- Store (estado central) ---
@@ -44,14 +82,13 @@ func Run() error {
 	// --- Auth Manager ---
 	authManager := auth.NewManager()
 
-	// --- Git local (abre diretório atual ou vazio) ---
-	repoPath := "."
-	if len(os.Args) > 1 {
-		repoPath = os.Args[1]
-	}
+	// --- Git local ---
 	gitOps := gitlocal.New(repoPath)
 
-	// --- Contexto com cancelamento para shutdown graceful ---
+	// --- Repo Manager (F1.2) ---
+	repoManager := store.NewRepoManager(appDir)
+
+	// --- Contexto com cancelamento ---
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -59,21 +96,24 @@ func Run() error {
 	model := tui.New(tui.Options{
 		Store:       st,
 		Theme:       th,
+		ThemeName:   cfg.ThemeName,
+		ThemeDir:    themeDir,
 		Config:      cfg,
 		Registry:    registry,
 		AuthManager: authManager,
 		GitOps:      gitOps,
+		RepoManager: repoManager,
 	})
 
 	// --- Bubble Tea program ---
 	p := tea.NewProgram(
 		model,
-		tea.WithAltScreen(),       // Tela alternativa (terminal limpo)
-		tea.WithMouseCellMotion(), // Suporte a mouse
+		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
 		tea.WithContext(ctx),
 	)
 
-	// --- Signal handling para shutdown graceful ---
+	// --- Signal handling ---
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -82,7 +122,7 @@ func Run() error {
 		p.Quit()
 	}()
 
-	// --- Iniciar a TUI (bloqueante) ---
+	// --- Iniciar TUI ---
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("executar TUI: %w", err)
 	}

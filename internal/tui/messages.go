@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/nicoddemus/github-desktop-tui/internal/store"
 	"github.com/nicoddemus/github-desktop-tui/pkg/types"
 )
 
@@ -128,3 +129,40 @@ type NotificationMsg struct {
 }
 
 type TickMsg struct{}
+
+// --- F1.1: Spinner messages ---
+
+type SpinnerTickMsg struct{}
+
+type SpinnerStartMsg struct {
+	Operation string
+}
+
+type SpinnerStopMsg struct{}
+
+// --- F1.2: Repo management messages ---
+
+type RepoScanMsg struct {
+	Repos []string
+}
+
+type RepoScanErrorMsg struct {
+	Err error
+}
+
+type RepoAddMsg struct {
+	Path string
+	Name string
+}
+
+type RepoAddErrorMsg struct {
+	Err error
+}
+
+type RepoRemoveMsg struct {
+	Path string
+}
+
+type ReposUpdatedMsg struct {
+	Repos []*store.TrackedRepo
+}

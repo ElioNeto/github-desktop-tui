@@ -29,6 +29,9 @@ type Options struct {
 	Registry    *providers.Registry
 	AuthManager *auth.Manager
 	GitOps      gitlocal.GitOperations
+	RepoManager *store.RepoManager
+	ThemeName   string
+	ThemeDir    string
 }
 
 // Mode indica o modo atual da TUI.
@@ -40,6 +43,7 @@ const (
 	ModeAuthInput
 	ModeAuthMethod
 	ModeAddRemote
+	ModeRepoAdd
 )
 
 // Model is the root Bubble Tea model.
@@ -50,6 +54,7 @@ type Model struct {
 	registry    *providers.Registry
 	authManager *auth.Manager
 	gitOps      gitlocal.GitOperations
+	repoManager *store.RepoManager
 
 	keys keybindings.KeyMap
 
@@ -66,14 +71,32 @@ type Model struct {
 	showRemotes  bool
 	showAuth     bool
 	showTimeline bool
+	showHistory  bool
+	showRepoAdd  bool
 
 	notification *NotificationMsg
 	notifTimer   time.Time
+
+	// F1.1: Spinner
+	spinnerActive   bool
+	spinnerOp       string
+	spinnerChars    []string
+	spinnerFrame    int
+	spinnerTick     int
+
+	// F1.1: Notification history
+	notificationHistory []NotificationMsg
+	historySelected     int
 
 	width, height int
 	ready         bool
 
 	mode Mode
+
+	// F1.4: Theme
+	availableThemes  []string
+	currentThemeIdx  int
+	themeDir         string
 
 	commitInput textinput.Model
 	authInput   textinput.Model
@@ -81,6 +104,8 @@ type Model struct {
 
 	remoteInput textinput.Model
 	remoteName  string
+
+	repoAddInput textinput.Model
 
 	fileChanges     []*types.FileChange
 	selectedFile    int
@@ -114,6 +139,22 @@ func New(opts Options) *Model {
 	ri.CharLimit = 300
 	ri.Width = 60
 
+	rai := textinput.New()
+	rai.Placeholder = "Caminho do repositório (ex: ~/projects/my-repo)"
+	rai.Focus()
+	rai.CharLimit = 300
+	rai.Width = 50
+
+	// Determine available themes
+	availThemes := []string{"dark", "light"}
+	themeIdx := 0
+	for i, t := range availThemes {
+		if t == opts.ThemeName {
+			themeIdx = i
+			break
+		}
+	}
+
 	return &Model{
 		store:       opts.Store,
 		theme:       opts.Theme,
@@ -121,6 +162,7 @@ func New(opts Options) *Model {
 		registry:    opts.Registry,
 		authManager: opts.AuthManager,
 		gitOps:      opts.GitOps,
+		repoManager: opts.RepoManager,
 		keys:        keybindings.DefaultKeyMap(),
 		focused:     PanelLeft,
 		leftView:    ViewRepositories,
@@ -129,12 +171,18 @@ func New(opts Options) *Model {
 		commitInput: ci,
 		authInput:   ai,
 		remoteInput: ri,
+		repoAddInput: rai,
 		fileChanges:     make([]*types.FileChange, 0),
 		selectedFile:    -1,
 		stagingSelected: make(map[int]bool),
 		timelineCommits: make([]*types.Commit, 0),
 		timelineIndex:   0,
 		remoteList:      make([]*types.Remote, 0),
+		notificationHistory: make([]NotificationMsg, 0),
+		spinnerChars:        []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"},
+		availableThemes:     availThemes,
+		currentThemeIdx:     themeIdx,
+		themeDir:            opts.ThemeDir,
 	}
 }
 
@@ -162,6 +210,47 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
+
+	// F1.3: Mouse click to focus panel
+	case tea.MouseMsg:
+		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
+			if msg.X < m.layout.LeftWidth {
+				m.focused = PanelLeft
+			} else if msg.X < m.layout.LeftWidth+m.layout.CenterWidth {
+				m.focused = PanelCenter
+			} else {
+				m.focused = PanelRight
+			}
+		}
+		return m, nil
+
+	// F1.1: Spinner tick
+	case SpinnerTickMsg:
+		if m.spinnerActive {
+			m.spinnerTick++
+			if m.spinnerTick%6 == 0 { // Slow down animation
+				m.spinnerFrame = (m.spinnerFrame + 1) % len(m.spinnerChars)
+			}
+			return m, func() tea.Msg {
+				time.Sleep(50 * time.Millisecond)
+				return SpinnerTickMsg{}
+			}
+		}
+		return m, nil
+
+	case SpinnerStartMsg:
+		m.spinnerActive = true
+		m.spinnerOp = msg.Operation
+		m.spinnerFrame = 0
+		return m, func() tea.Msg {
+			time.Sleep(50 * time.Millisecond)
+			return SpinnerTickMsg{}
+		}
+
+	case SpinnerStopMsg:
+		m.spinnerActive = false
+		m.spinnerOp = ""
+		return m, nil
 
 	case FocusChangeMsg:
 		m.focused = msg.Panel
@@ -285,6 +374,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case GitBranchesErrorMsg:
 		m.setNotification("error", msg.Err.Error())
 		return m, nil
+
+	// F1.2: Repo management
+	case RepoScanMsg:
+		for _, p := range msg.Repos {
+			_ = m.repoManager.Add(p)
+		}
+		m.setNotification("success", fmt.Sprintf("%d repositórios adicionados", len(msg.Repos)))
+		return m, nil
+
+	case RepoScanErrorMsg:
+		m.setNotification("error", msg.Err.Error())
+		return m, nil
+
+	case RepoAddMsg:
+		m.setNotification("success", fmt.Sprintf("Repositório adicionado: %s", msg.Name))
+		return m, nil
+
+	case RepoAddErrorMsg:
+		m.setNotification("error", msg.Err.Error())
+		return m, nil
+
+	case ReposUpdatedMsg:
+		m.setNotification("info", "Lista de repositórios atualizada")
+		return m, nil
 	}
 
 	return m, nil
@@ -302,6 +415,8 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleAuthInput(msg)
 	case ModeAddRemote:
 		return m.handleRemoteInput(msg)
+	case ModeRepoAdd:
+		return m.handleRepoAddInput(msg)
 	}
 
 	switch {
@@ -399,9 +514,128 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.loadTimeline()
 		}
 		return m, nil
+
+	// F1.3: Panel shortcuts
+	case key.Matches(msg, m.keys.Panel1):
+		m.focused = PanelLeft
+		return m, nil
+
+	case key.Matches(msg, m.keys.Panel2):
+		m.focused = PanelCenter
+		return m, nil
+
+	case key.Matches(msg, m.keys.Panel3):
+		m.focused = PanelRight
+		return m, nil
+
+	// F1.1: Notification history
+	case key.Matches(msg, m.keys.History):
+		m.showHistory = !m.showHistory
+		return m, nil
+
+	// F1.4: Theme toggle
+	case key.Matches(msg, m.keys.ThemeToggle):
+		return m.handleThemeToggle()
+
+	// F1.2: Repo management (only when left panel is focused and no overlays open)
+	case key.Matches(msg, m.keys.RepoAdd):
+		if m.focused == PanelLeft && !m.showStaging && !m.showTimeline && !m.showRemotes && !m.showAuth {
+			m.showRepoAdd = true
+			m.mode = ModeAddRemote // reuse ModeAddRemote for repo input
+			m.repoAddInput.Focus()
+			return m, nil
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keys.RepoScan):
+		if m.focused == PanelLeft {
+			return m, m.scanRepos()
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keys.RepoRemove):
+		if m.focused == PanelLeft {
+			return m.handleRemoveRepo()
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keys.RepoFav):
+		if m.focused == PanelLeft {
+			m.handleFavRepo()
+			return m, nil
+		}
+		return m, nil
 	}
 
 	return m, nil
+}
+
+// ---------------------------------------------------------------------------
+// F1.4: Theme toggle
+// ---------------------------------------------------------------------------
+
+func (m Model) handleThemeToggle() (tea.Model, tea.Cmd) {
+	m.currentThemeIdx = (m.currentThemeIdx + 1) % len(m.availableThemes)
+	name := m.availableThemes[m.currentThemeIdx]
+
+	// Try loading from theme dir first, fallback to built-in
+	newTheme := theme.BuiltinTheme(name)
+	if m.themeDir != "" {
+		if loaded, err := theme.Load(m.themeDir + "/" + name + ".json"); err == nil {
+			newTheme = loaded
+		}
+	}
+	m.theme = newTheme
+
+	// Persist preference
+	m.config.ThemeName = name
+	_ = m.config.Save()
+
+	m.setNotification("info", fmt.Sprintf("Tema: %s", name))
+	return m, nil
+}
+
+// ---------------------------------------------------------------------------
+// F1.2: Repo management handlers
+// ---------------------------------------------------------------------------
+
+func (m Model) scanRepos() tea.Cmd {
+	return func() tea.Msg {
+		repos, err := m.repoManager.Scan(".")
+		if err != nil {
+			return RepoScanErrorMsg{Err: err}
+		}
+		if len(repos) == 0 {
+			return RepoScanErrorMsg{Err: fmt.Errorf("nenhum repositório Git encontrado")}
+		}
+		for _, p := range repos {
+			_ = m.repoManager.Add(p)
+		}
+		m.setNotification("success", fmt.Sprintf("%d repositórios adicionados", len(repos)))
+		return RepoScanMsg{Repos: repos}
+	}
+}
+
+func (m Model) handleRemoveRepo() (tea.Model, tea.Cmd) {
+	repos := m.repoManager.List()
+	if len(repos) == 0 {
+		m.setNotification("warning", "Nenhum repositório para remover")
+		return m, nil
+	}
+	idx := m.store.Repositories.SelectedIndex()
+	if idx >= 0 && idx < len(repos) {
+		m.repoManager.Remove(repos[idx].Path)
+		m.setNotification("info", fmt.Sprintf("Removido: %s", repos[idx].Name))
+	}
+	return m, nil
+}
+
+func (m Model) handleFavRepo() {
+	repos := m.repoManager.List()
+	idx := m.store.Repositories.SelectedIndex()
+	if idx >= 0 && idx < len(repos) {
+		m.repoManager.ToggleFavorite(repos[idx].Path)
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -484,6 +718,39 @@ func (m Model) handleRemoteInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
+func (m Model) handleRepoAddInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEnter:
+		path := strings.TrimSpace(m.repoAddInput.Value())
+		if path == "" {
+			m.setNotification("warning", "Caminho não pode estar vazio")
+			return m, nil
+		}
+		return m, m.executeRepoAdd(path)
+	case tea.KeyEsc:
+		m.mode = ModeNormal
+		m.showRepoAdd = false
+		m.repoAddInput.SetValue("")
+		return m, nil
+	default:
+		var cmd tea.Cmd
+		m.repoAddInput, cmd = m.repoAddInput.Update(msg)
+		return m, cmd
+	}
+}
+
+func (m Model) executeRepoAdd(path string) tea.Cmd {
+	return func() tea.Msg {
+		if err := m.repoManager.Add(path); err != nil {
+			return RepoAddErrorMsg{Err: err}
+		}
+		m.mode = ModeNormal
+		m.showRepoAdd = false
+		m.repoAddInput.SetValue("")
+		return RepoAddMsg{Path: path, Name: path}
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Action handlers
 // ---------------------------------------------------------------------------
@@ -512,6 +779,8 @@ func (m Model) handleEscape() (tea.Model, tea.Cmd) {
 	switch {
 	case m.showHelp:
 		m.showHelp = false
+	case m.showHistory:
+		m.showHistory = false
 	case m.showStaging:
 		m.showStaging = false
 	case m.showTimeline:
@@ -520,6 +789,9 @@ func (m Model) handleEscape() (tea.Model, tea.Cmd) {
 		m.showRemotes = false
 	case m.showAuth:
 		m.showAuth = false
+		m.mode = ModeNormal
+	case m.showRepoAdd:
+		m.showRepoAdd = false
 		m.mode = ModeNormal
 	case m.showSearch:
 		m.showSearch = false
@@ -730,8 +1002,14 @@ func (m Model) executeAddRemote(name, url string) tea.Cmd {
 // ---------------------------------------------------------------------------
 
 func (m *Model) setNotification(level, message string) {
-	m.notification = &NotificationMsg{Level: level, Message: message}
+	msg := NotificationMsg{Level: level, Message: message}
+	m.notification = &msg
 	m.notifTimer = time.Now()
+	// Add to history (max 50)
+	m.notificationHistory = append(m.notificationHistory, msg)
+	if len(m.notificationHistory) > 50 {
+		m.notificationHistory = m.notificationHistory[1:]
+	}
 }
 
 func refreshGitStatus(gitOps gitlocal.GitOperations) tea.Cmd {
@@ -755,21 +1033,30 @@ func (m Model) View() string {
 
 	var b strings.Builder
 
-	// ── Panel headers ──
-	leftHeader := m.renderPanelHeader("  Repos  ", m.focused == PanelLeft)
-	centerHeader := m.renderPanelHeader("  Commits  ", m.focused == PanelCenter)
-	rightHeader := m.renderPanelHeader("  Detalhes  ", m.focused == PanelRight)
-
-	// ── Panel content ──
+	// ── Panel content with borders (F1.3) ──
 	leftContent := m.renderLeftPanel()
 	centerContent := m.renderCenterPanel()
 	rightContent := m.renderRightPanel()
 
-	// ── Combine ──
-	headerLine := leftHeader + centerHeader + rightHeader
-	b.WriteString(headerLine)
-	b.WriteString("\n")
+	// Apply panel styles
+	leftStyle := m.theme.PanelStyle
+	if m.focused == PanelLeft {
+		leftStyle = m.theme.ActivePanelStyle
+	}
+	centerStyle := m.theme.PanelStyle
+	if m.focused == PanelCenter {
+		centerStyle = m.theme.ActivePanelStyle
+	}
+	rightStyle := m.theme.PanelStyle
+	if m.focused == PanelRight {
+		rightStyle = m.theme.ActivePanelStyle
+	}
 
+	leftContent = leftStyle.Width(m.layout.LeftWidth).Render(leftContent)
+	centerContent = centerStyle.Width(m.layout.CenterWidth).Render(centerContent)
+	rightContent = rightStyle.Width(m.layout.RightWidth).Render(rightContent)
+
+	// ── Combine ──
 	for line := 0; line < m.layout.PanelHeight-1; line++ {
 		leftLine := getLine(leftContent, line, m.layout.LeftWidth)
 		centerLine := getLine(centerContent, line, m.layout.CenterWidth)
@@ -790,6 +1077,9 @@ func (m Model) View() string {
 	if m.showHelp {
 		b.WriteString("\n" + m.renderHelpOverlay())
 	}
+	if m.showHistory {
+		b.WriteString("\n" + m.renderHistoryOverlay())
+	}
 	if m.showStaging {
 		b.WriteString("\n" + m.renderStagingOverlay())
 	}
@@ -801,6 +1091,9 @@ func (m Model) View() string {
 	}
 	if m.showAuth {
 		b.WriteString("\n" + m.renderAuthOverlay())
+	}
+	if m.showRepoAdd {
+		b.WriteString("\n" + m.renderRepoAddOverlay())
 	}
 	if m.mode == ModeCommitMessage {
 		b.WriteString("\n" + m.renderCommitInputOverlay())
@@ -833,7 +1126,7 @@ func (m Model) renderPanelHeader(title string, isFocused bool) string {
 func (m Model) renderLeftPanel() string {
 	var b strings.Builder
 
-	// Provider active indicator
+	// Provider + branch
 	activeProv := m.store.Settings.ActiveProvider()
 	b.WriteString(m.theme.BranchStyle.Render(" " + activeProv + " "))
 	b.WriteString(m.theme.DimmedStyle.Render(m.store.Branches.Active()))
@@ -843,7 +1136,7 @@ func (m Model) renderLeftPanel() string {
 	b.WriteString(m.theme.DimmedStyle.Render(strings.Repeat("─", m.layout.LeftWidth)))
 	b.WriteString("\n")
 
-	// Repos
+	// Repos from RepoManager (F1.2)
 	titleStyle := m.theme.TitleStyle
 	if m.focused == PanelLeft {
 		titleStyle = m.theme.FocusedStyle
@@ -851,12 +1144,12 @@ func (m Model) renderLeftPanel() string {
 	b.WriteString(titleStyle.Render(" Repos "))
 	b.WriteString("\n")
 
-	repos := m.store.Repositories.Repos()
-	if len(repos) == 0 {
-		b.WriteString(m.theme.DimmedStyle.Render("  (r para atualizar)"))
+	trackedRepos := m.repoManager.List()
+	if len(trackedRepos) == 0 {
+		b.WriteString(m.theme.DimmedStyle.Render("  (a: adicionar, A: scan)"))
 		b.WriteString("\n")
 	} else {
-		for i, repo := range repos {
+		for i, repo := range trackedRepos {
 			cursor := " "
 			if i == m.store.Repositories.SelectedIndex() {
 				cursor = "▶"
@@ -865,7 +1158,11 @@ func (m Model) renderLeftPanel() string {
 			if i == m.store.Repositories.SelectedIndex() {
 				style = m.theme.SelectedStyle
 			}
-			b.WriteString(style.Render(fmt.Sprintf(" %s %s", cursor, repo.FullName)))
+			fav := " "
+			if repo.IsFavorite {
+				fav = m.theme.KeyStyle.Render("★")
+			}
+			b.WriteString(style.Render(fmt.Sprintf(" %s %s %s", cursor, fav, repo.Name)))
 			b.WriteString("\n")
 		}
 	}
@@ -895,6 +1192,8 @@ func (m Model) renderLeftPanel() string {
 	keys := []struct{ k, d string }{
 		{"c", "commit"}, {"s", "stage"}, {"p", "push"}, {"l", "pull"},
 		{"b", "branch"}, {"/", "timeline"}, {"P", "auth"}, {"r", "refresh"},
+		{"a", "add repo"}, {"A", "scan repos"}, {"x", "remove"}, {"f", "fav"},
+		{"1-3", "panels"}, {"T", "theme"}, {"N", "history"},
 	}
 	for _, kv := range keys {
 		b.WriteString(fmt.Sprintf("  %s  %s\n",
@@ -1103,8 +1402,15 @@ func (m Model) renderStatusBar() string {
 	provider := m.store.Settings.ActiveProvider()
 	branch := m.store.Branches.Active()
 
-	// Left section: provider + branch
+	// Spinner indicator (F1.1)
+	spinner := ""
+	if m.spinnerActive {
+		spinner = m.theme.WarningText.Render(" " + m.spinnerChars[m.spinnerFrame] + " " + m.spinnerOp + " ")
+	}
+
+	// Left section: provider + branch + spinner
 	left := fmt.Sprintf("  %s  ⎇ %s  ", provider, branch)
+	left += spinner
 	if len(m.fileChanges) > 0 {
 		staged := 0
 		for _, fc := range m.fileChanges {
@@ -1407,6 +1713,59 @@ func (m Model) renderNotification() string {
 	return "  " + style.Render(" " + m.notification.Message + " ")
 }
 
+func (m Model) renderHistoryOverlay() string {
+	ovWidth := 66
+	title := m.theme.OverlayTitle.Render(" Histórico de Notificações ")
+	help := m.theme.DimmedStyle.Render(" esc: fechar ")
+
+	var inner strings.Builder
+	if len(m.notificationHistory) == 0 {
+		inner.WriteString(m.theme.DimmedStyle.Render("  Nenhuma notificação no histórico"))
+	} else {
+		start := 0
+		if len(m.notificationHistory) > 15 {
+			start = len(m.notificationHistory) - 15
+		}
+		for i := start; i < len(m.notificationHistory); i++ {
+			n := m.notificationHistory[i]
+			var color lipgloss.Style
+			switch n.Level {
+			case "error":
+				color = m.theme.ErrorText
+			case "warning":
+				color = m.theme.WarningText
+			case "success":
+				color = m.theme.SuccessText
+			default:
+				color = m.theme.InfoText
+			}
+			msg := n.Message
+			if len(msg) > 50 {
+				msg = msg[:50] + "…"
+			}
+			inner.WriteString(fmt.Sprintf("  %s %s\n", color.Render("▸"), msg))
+		}
+	}
+
+	content := lipgloss.NewStyle().Width(ovWidth - 2).Render(title + "\n" + help + "\n" + inner.String())
+	return m.theme.OverlayBorder.Width(ovWidth).Render(centeredText(content, m.width, ovWidth))
+}
+
+func (m Model) renderRepoAddOverlay() string {
+	ovWidth := 60
+	title := m.theme.OverlayTitle.Render(" Adicionar Repositório ")
+	help := m.theme.DimmedStyle.Render(" ↵: confirmar  esc: cancelar ")
+
+	var inner strings.Builder
+	inner.WriteString("\n")
+	inner.WriteString("  Caminho: " + m.repoAddInput.View() + "\n")
+	inner.WriteString("\n")
+	inner.WriteString(m.theme.DimmedStyle.Render("  Ex: ~/projects/my-repo ou /home/user/project"))
+
+	content := lipgloss.NewStyle().Width(ovWidth - 2).Render(title + "\n" + help + "\n" + inner.String())
+	return m.theme.OverlayBorder.Width(ovWidth).Render(centeredText(content, m.width, ovWidth))
+}
+
 func (m Model) renderHelpOverlay() string {
 	title := m.theme.OverlayTitle.Render(" Ajuda - Teclas ")
 
@@ -1417,6 +1776,9 @@ func (m Model) renderHelpOverlay() string {
 		{m.keys.Refresh.Help().Key, m.keys.Refresh.Help().Desc},
 		{m.keys.FocusNext.Help().Key, m.keys.FocusNext.Help().Desc},
 		{m.keys.FocusPrev.Help().Key, m.keys.FocusPrev.Help().Desc},
+		{m.keys.Panel1.Help().Key, m.keys.Panel1.Help().Desc},
+		{m.keys.Panel2.Help().Key, m.keys.Panel2.Help().Desc},
+		{m.keys.Panel3.Help().Key, m.keys.Panel3.Help().Desc},
 		{m.keys.Stage.Help().Key, m.keys.Stage.Help().Desc},
 		{m.keys.Commit.Help().Key, m.keys.Commit.Help().Desc},
 		{m.keys.Push.Help().Key, m.keys.Push.Help().Desc},
@@ -1425,6 +1787,12 @@ func (m Model) renderHelpOverlay() string {
 		{m.keys.Diff.Help().Key, m.keys.Diff.Help().Desc},
 		{m.keys.ProviderSwitch.Help().Key, m.keys.ProviderSwitch.Help().Desc},
 		{m.keys.Search.Help().Key, m.keys.Search.Help().Desc},
+		{m.keys.ThemeToggle.Help().Key, m.keys.ThemeToggle.Help().Desc},
+		{m.keys.History.Help().Key, m.keys.History.Help().Desc},
+		{m.keys.RepoAdd.Help().Key, m.keys.RepoAdd.Help().Desc},
+		{m.keys.RepoScan.Help().Key, m.keys.RepoScan.Help().Desc},
+		{m.keys.RepoRemove.Help().Key, m.keys.RepoRemove.Help().Desc},
+		{m.keys.RepoFav.Help().Key, m.keys.RepoFav.Help().Desc},
 	}
 	for _, kv := range keys {
 		inner.WriteString(fmt.Sprintf("  %s  %s\n",
@@ -1433,8 +1801,8 @@ func (m Model) renderHelpOverlay() string {
 	}
 	inner.WriteString(m.theme.DimmedStyle.Render("  esc: fechar"))
 
-	content := lipgloss.NewStyle().Width(40).Render(title + "\n" + inner.String())
-	return m.theme.OverlayBorder.Width(42).Render(centeredText(content, m.width, 42))
+	content := lipgloss.NewStyle().Width(44).Render(title + "\n" + inner.String())
+	return m.theme.OverlayBorder.Width(46).Render(centeredText(content, m.width, 46))
 }
 
 // ---------------------------------------------------------------------------

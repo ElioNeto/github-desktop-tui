@@ -72,6 +72,36 @@ type Theme struct {
 	InfoText    lipgloss.Style
 }
 
+// BuiltinTheme returns one of the built-in themes by name.
+func BuiltinTheme(name string) *Theme {
+	switch name {
+	case "light":
+		return Light()
+	case "dark":
+		return Default()
+	default:
+		return Default()
+	}
+}
+
+// Light returns the light theme.
+func Light() *Theme {
+	t := &Theme{
+		Background: lipgloss.Color("#fdf6e3"),
+		Surface:    lipgloss.Color("#eee8d5"),
+		Primary:    lipgloss.Color("#dc322f"),
+		Accent:     lipgloss.Color("#dc322f"),
+		Text:       lipgloss.Color("#073642"),
+		Muted:      lipgloss.Color("#93a1a1"),
+		Success:    lipgloss.Color("#859900"),
+		Warning:    lipgloss.Color("#b58900"),
+		Error:      lipgloss.Color("#dc322f"),
+		Info:       lipgloss.Color("#268bd2"),
+	}
+	t.initStyles()
+	return t
+}
+
 // Default returns the default theme with the user's palette.
 func Default() *Theme {
 	t := &Theme{

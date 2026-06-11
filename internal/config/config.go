@@ -15,6 +15,9 @@ type Config struct {
 	// ThemeFile is the path to the theme JSON file.
 	ThemeFile string `json:"theme_file"`
 
+	// ThemeName is the name of the active theme (dark, light, custom).
+	ThemeName string `json:"theme_name"`
+
 	// DataDir is the directory for storing app data (credentials, cache).
 	DataDir string `json:"data_dir"`
 
