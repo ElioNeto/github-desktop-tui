@@ -1,0 +1,134 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "god",
+  "lsp": true,
+  "instructions": [
+    "docs/architecture.md",
+    "docs/contributing.md"
+  ],
+  "skills": {
+    "paths": [
+      ".teamcode/skills"
+    ]
+  },
+  "tools": {},
+  "command": {
+    "dev": {
+      "description": "Iniciar o servidor de desenvolvimento com hot-reload",
+      "prompt": "Execute o servidor de desenvolvimento. O projeto usa Bun. Execute `bun run dev` ou `bun run tauri dev` se for Tauri. Se for Go/termui, execute `go run .` ou `air`."
+    },
+    "build": {
+      "description": "Compilar o projeto para produção",
+      "prompt": "Compile o projeto. Se for Bun/Node: `bun run build`. Se for Tauri: `bun run tauri build`. Se for Go: `go build -o dist/ .`."
+    },
+    "test": {
+      "description": "Executar testes automatizados",
+      "prompt": "Execute `bun test` ou `go test ./...` conforme o stack do projeto."
+    },
+    "lint": {
+      "description": "Verificar qualidade do código com linter",
+      "prompt": "Execute o linter configurado: `bun run lint`, `golangci-lint run`, ou similar."
+    },
+    "typecheck": {
+      "description": "Verificar tipos sem emitir arquivos",
+      "prompt": "Execute `bun run typecheck` ou `tsc --noEmit` para TypeScript, ou `go vet ./...` para Go."
+    },
+    "add-provider": {
+      "description": "Adicionar suporte a um novo provedor Git",
+      "prompt": "Adicione um novo provedor Git (GitHub, GitLab, Bitbucket, Gitea, etc.). Crie: (1) provider/<nome>/client.ts com a API client, (2) provider/<nome>/types.ts com as interfaces, (3) provider/<nome>/auth.ts com fluxo OAuth/token, (4) registre no ProviderRegistry em src/providers/registry.ts."
+    }
+  },
+  "agent": {
+    "god": {
+      "description": "Agente onipotente com acesso irrestrito a todas as ferramentas e permissões"
+    },
+    "tui-dev": {
+      "description": "Especialista em desenvolvimento de TUIs (Bubble Tea, Ratatui, Ink, etc.)",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "write": "allow",
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "bash": {
+          "bun *": "allow",
+          "go *": "allow",
+          "npm *": "allow",
+          "git *": "allow",
+          "*": "allow"
+        }
+      }
+    },
+    "git-provider": {
+      "description": "Especialista em integrar APIs de provedores Git (GitHub, GitLab, Bitbucket, Gitea)",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "write": "allow",
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "bash": {
+          "bun *": "allow",
+          "go *": "allow",
+          "git *": "allow",
+          "*": "allow"
+        }
+      }
+    }
+  },
+  "provider": {
+    "opencode": {
+      "options": {}
+    }
+  },
+  "mcp": {
+    "playwright": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@playwright/mcp"
+      ],
+      "enabled": false,
+      "env": {}
+    }
+  },
+  "permission": {
+    "edit": "allow",
+    "bash": {
+      "git *": "allow",
+      "ls *": "allow",
+      "mkdir *": "allow",
+      "cp *": "allow",
+      "mv *": "allow",
+      "gh *": "allow",
+      "bun *": "allow",
+      "go *": "allow",
+      "*": "allow"
+    },
+    "external_directory": {
+      "/tmp": "allow",
+      "*": "allow"
+    }
+  },
+  "experimental": {
+    "primary_tools": [
+      "edit",
+      "bash",
+      "glob",
+      "grep",
+      "read"
+    ],
+    "mcp_timeout": 30000
+  },
+  "tool_output": {
+    "max_lines": 200,
+    "max_bytes": 16384
+  },
+  "compaction": {
+    "auto": true,
+    "tail_turns": 15
+  }
+}

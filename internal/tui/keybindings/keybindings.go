@@ -1,0 +1,123 @@
+package keybindings
+
+import "github.com/charmbracelet/bubbles/key"
+
+// KeyMap defines all keybindings for the application.
+type KeyMap struct {
+	Help           key.Binding
+	Quit           key.Binding
+	Refresh        key.Binding
+	FocusNext      key.Binding
+	FocusPrev      key.Binding
+	Search         key.Binding
+	Enter          key.Binding
+	Escape         key.Binding
+	Diff           key.Binding
+	Stage          key.Binding
+	Unstage        key.Binding
+	Commit         key.Binding
+	Push           key.Binding
+	Pull           key.Binding
+	Branch         key.Binding
+	ProviderSwitch key.Binding
+	Up             key.Binding
+	Down           key.Binding
+	PageUp         key.Binding
+	PageDown       key.Binding
+	Home           key.Binding
+	End            key.Binding
+}
+
+// DefaultKeyMap returns the default keybinding set.
+func DefaultKeyMap() KeyMap {
+	return KeyMap{
+		Help: key.NewBinding(
+			key.WithKeys("?"),
+			key.WithHelp("?", "ajuda"),
+		),
+		Quit: key.NewBinding(
+			key.WithKeys("q", "ctrl+c"),
+			key.WithHelp("q", "sair"),
+		),
+		Refresh: key.NewBinding(
+			key.WithKeys("r"),
+			key.WithHelp("r", "atualizar"),
+		),
+		FocusNext: key.NewBinding(
+			key.WithKeys("tab"),
+			key.WithHelp("tab", "próximo painel"),
+		),
+		FocusPrev: key.NewBinding(
+			key.WithKeys("shift+tab"),
+			key.WithHelp("shift+tab", "painel anterior"),
+		),
+		Search: key.NewBinding(
+			key.WithKeys("/"),
+			key.WithHelp("/", "buscar"),
+		),
+		Enter: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("enter", "confirmar"),
+		),
+		Escape: key.NewBinding(
+			key.WithKeys("esc"),
+			key.WithHelp("esc", "voltar"),
+		),
+		Diff: key.NewBinding(
+			key.WithKeys("d"),
+			key.WithHelp("d", "ver diff"),
+		),
+		Stage: key.NewBinding(
+			key.WithKeys("s"),
+			key.WithHelp("s", "stage"),
+		),
+		Unstage: key.NewBinding(
+			key.WithKeys("u"),
+			key.WithHelp("u", "unstage"),
+		),
+		Commit: key.NewBinding(
+			key.WithKeys("c"),
+			key.WithHelp("c", "commitar"),
+		),
+		Push: key.NewBinding(
+			key.WithKeys("p"),
+			key.WithHelp("p", "push"),
+		),
+		Pull: key.NewBinding(
+			key.WithKeys("l"),
+			key.WithHelp("l", "pull"),
+		),
+		Branch: key.NewBinding(
+			key.WithKeys("b"),
+			key.WithHelp("b", "branch"),
+		),
+		ProviderSwitch: key.NewBinding(
+			key.WithKeys("P"),
+			key.WithHelp("P", "trocar provedor"),
+		),
+		Up: key.NewBinding(
+			key.WithKeys("up", "k"),
+			key.WithHelp("↑/k", "cima"),
+		),
+		Down: key.NewBinding(
+			key.WithKeys("down", "j"),
+			key.WithHelp("↓/j", "baixo"),
+		),
+		PageUp: key.NewBinding(
+			key.WithKeys("pgup"),
+			key.WithHelp("pgup", "página acima"),
+		),
+		PageDown: key.NewBinding(
+			key.WithKeys("pgdown"),
+			key.WithHelp("pgdn", "página abaixo"),
+		),
+		Home: key.NewBinding(
+			key.WithKeys("home"),
+			key.WithHelp("home", "início"),
+		),
+		End: key.NewBinding(
+			key.WithKeys("end"),
+			key.WithHelp("end", "fim"),
+		),
+	}
+}

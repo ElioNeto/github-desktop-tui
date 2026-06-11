@@ -1,0 +1,25 @@
+# Build output
+dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go
+*.test
+*.out
+*.prof
+go.work
+go.work.sum
+
+# Config específica do app
+github-desktop-tui.json
+
+# Binário
+github-desktop-tui

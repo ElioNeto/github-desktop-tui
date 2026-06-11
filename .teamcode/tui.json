@@ -1,0 +1,49 @@
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "mytheme",
+  "plugin": [],
+  "title": "GitHub Desktop TUI",
+  "subtitle": "Multi-Provider Git Client",
+  "welcome_message": "Bem-vindo ao GitHub Desktop TUI — gerencie seus repositórios Git no terminal",
+  "panels": {
+    "left": {
+      "width_ratio": 0.25,
+      "min_width": 30,
+      "views": ["repositories", "providers", "favorites"]
+    },
+    "center": {
+      "width_ratio": 0.45,
+      "min_width": 50,
+      "views": ["commit-list", "branch-list", "diff-viewer"]
+    },
+    "right": {
+      "width_ratio": 0.30,
+      "min_width": 35,
+      "views": ["details", "file-tree", "preview"]
+    }
+  },
+  "status_bar": {
+    "show_branch": true,
+    "show_provider": true,
+    "show_sync_status": true,
+    "show_clock": true
+  },
+  "keybindings": {
+    "help": "?",
+    "quit": ["q", "ctrl+c"],
+    "refresh": "r",
+    "focus_next": "tab",
+    "focus_prev": "shift+tab",
+    "search": "/",
+    "enter": "enter",
+    "escape": "esc",
+    "diff": "d",
+    "stage": "s",
+    "unstage": "u",
+    "commit": "c",
+    "push": "p",
+    "pull": "l",
+    "branch": "b",
+    "provider_switch": "P"
+  }
+}
