@@ -62,7 +62,7 @@ func CalculateLayout(width, height int) Layout {
 	l := Layout{
 		Width:           width,
 		Height:          height,
-		StatusBarHeight: 1,
+		StatusBarHeight: 2,
 		PanelGap:        0, // No gap - borders take space from the panel content
 	}
 

@@ -1094,6 +1094,8 @@ func (m Model) View() string {
 	// ── Status bar ──
 	b.WriteString("\n")
 	b.WriteString(m.renderStatusBar())
+	b.WriteString("\n")
+	b.WriteString(m.renderCommandBar())
 
 	// ── Overlays ──
 	if m.showHelp {
@@ -1474,6 +1476,116 @@ func (m Model) renderStatusBar() string {
 		spaces = 1
 	}
 	return m.theme.StatusBarStyle.Render(left + strings.Repeat(" ", spaces) + right)
+}
+
+func (m Model) renderCommandBar() string {
+	// Context-sensitive commands based on current state
+	type cmd struct {
+		key, desc string
+	}
+	var cmds []cmd
+
+	if m.showStaging {
+		cmds = []cmd{
+			{"↑↓", "navegar"},
+			{"s", "stage/unstage"},
+			{"↵", "commitar"},
+			{"p", "push"},
+			{"d", "diff"},
+			{"esc", "voltar"},
+		}
+	} else if m.showTimeline {
+		cmds = []cmd{
+			{"↑↓", "navegar"},
+			{"esc", "fechar"},
+		}
+	} else if m.showHistory {
+		cmds = []cmd{
+			{"esc", "fechar"},
+		}
+	} else if m.showAuth {
+		cmds = []cmd{
+			{"↵", "confirmar"},
+			{"esc", "cancelar"},
+		}
+	} else if m.showRemotes {
+		cmds = []cmd{
+			{"a", "adicionar"},
+			{"esc", "fechar"},
+		}
+	} else if m.showRepoAdd {
+		cmds = []cmd{
+			{"↵", "adicionar"},
+			{"esc", "cancelar"},
+		}
+	} else if m.mode == ModeCommitMessage {
+		cmds = []cmd{
+			{"↵", "commitar"},
+			{"esc", "cancelar"},
+		}
+	} else if m.showHelp {
+		cmds = []cmd{
+			{"esc", "fechar"},
+		}
+	} else {
+		// Global commands based on focused panel
+		switch m.focused {
+		case PanelLeft:
+			cmds = []cmd{
+				{"a", "add repo"},
+				{"A", "scan"},
+				{"x", "remove"},
+				{"f", "fav"},
+			}
+		case PanelCenter:
+			cmds = []cmd{
+				{"↑↓", "navegar"},
+				{"b", "branches"},
+			}
+		case PanelRight:
+			cmds = []cmd{}
+		}
+		// Always show global commands
+		globalCmds := []cmd{
+			{"c", "commit"},
+			{"p", "push"},
+			{"l", "pull"},
+			{"/", "timeline"},
+			{"P", "auth"},
+			{"r", "refresh"},
+			{"1-3", "painel"},
+			{"T", "tema"},
+			{"N", "hist"},
+			{"?", "ajuda"},
+			{"q", "sair"},
+		}
+		cmds = append(cmds, globalCmds...)
+	}
+
+	// Render command bar
+	var sb strings.Builder
+	for i, c := range cmds {
+		if i > 0 {
+			sb.WriteString(" ")
+		}
+		sb.WriteString(m.theme.KeyStyle.Render(" " + c.key + " "))
+		sb.WriteString(m.theme.DimmedStyle.Render(c.desc))
+	}
+	cmdStr := sb.String()
+
+	// Pad to full width
+	spaces := m.width - len(cmdStr)
+	if spaces < 0 {
+		spaces = 0
+	}
+
+	// Use a dimmed style for the command bar
+	barStyle := lipgloss.NewStyle().
+		Foreground(m.theme.Muted).
+		Background(m.theme.Background).
+		Padding(0, 2)
+
+	return barStyle.Render(cmdStr + strings.Repeat(" ", spaces))
 }
 
 // ---------------------------------------------------------------------------
