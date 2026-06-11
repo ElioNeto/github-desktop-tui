@@ -132,6 +132,12 @@ func (s *CommitStore) Select(index int) {
 	}
 }
 
+func (s *CommitStore) SelectedIndex() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.selected
+}
+
 // --- BranchStore ---
 
 type BranchStore struct {

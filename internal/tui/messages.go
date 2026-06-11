@@ -65,6 +65,38 @@ type GitDiffErrorMsg struct {
 	Err error
 }
 
+type GitStatusErrorMsg struct {
+	Err error
+}
+
+type GitPushErrorMsg struct {
+	Err error
+}
+
+type GitLogLoadedMsg struct {
+	Commits []*types.Commit
+}
+
+type GitLogErrorMsg struct {
+	Err error
+}
+
+type GitBranchesLoadedMsg struct {
+	Branches []*types.Branch
+}
+
+type GitBranchesErrorMsg struct {
+	Err error
+}
+
+type RemotesLoadedMsg struct {
+	Remotes []*types.Remote
+}
+
+type RemotesErrorMsg struct {
+	Err error
+}
+
 // --- Mensagens de Provedor ---
 
 type ProviderSwitchMsg struct {

@@ -9,7 +9,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/nicoddemus/github-desktop-tui/internal/auth"
 	"github.com/nicoddemus/github-desktop-tui/internal/config"
+	gitlocal "github.com/nicoddemus/github-desktop-tui/internal/git"
 	"github.com/nicoddemus/github-desktop-tui/internal/providers"
 	githubprovider "github.com/nicoddemus/github-desktop-tui/internal/providers/github"
 	"github.com/nicoddemus/github-desktop-tui/internal/store"
@@ -33,10 +35,21 @@ func Run() error {
 
 	// --- Store (estado central) ---
 	st := store.New()
+	st.Settings.SetConfig(cfg)
 
 	// --- Registry de provedores Git ---
 	registry := providers.NewRegistry()
 	registry.Register(githubprovider.NewProvider())
+
+	// --- Auth Manager ---
+	authManager := auth.NewManager()
+
+	// --- Git local (abre diretório atual ou vazio) ---
+	repoPath := "."
+	if len(os.Args) > 1 {
+		repoPath = os.Args[1]
+	}
+	gitOps := gitlocal.New(repoPath)
 
 	// --- Contexto com cancelamento para shutdown graceful ---
 	ctx, cancel := context.WithCancel(context.Background())
@@ -44,10 +57,12 @@ func Run() error {
 
 	// --- Model raiz do Bubble Tea ---
 	model := tui.New(tui.Options{
-		Store:    st,
-		Theme:    th,
-		Config:   cfg,
-		Registry: registry,
+		Store:       st,
+		Theme:       th,
+		Config:      cfg,
+		Registry:    registry,
+		AuthManager: authManager,
+		GitOps:      gitOps,
 	})
 
 	// --- Bubble Tea program ---
