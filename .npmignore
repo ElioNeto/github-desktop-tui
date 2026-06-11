@@ -1,0 +1,17 @@
+.git/
+.teamcode/
+.vscode/
+.idea/
+*.test
+*.out
+*.prof
+Makefile
+go.mod
+go.sum
+internal/
+pkg/
+cmd/
+docs/architecture.md
+dist/
+node_modules/
+npm/

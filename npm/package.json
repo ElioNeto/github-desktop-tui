@@ -1,0 +1,64 @@
+{
+  "name": "github-desktop-tui",
+  "version": "0.1.0",
+  "description": "Terminal User Interface for Git operations - multi-provider (GitHub, GitLab, Bitbucket, Gitea) with staging, timeline, commit, push, and auth management",
+  "keywords": [
+    "git",
+    "tui",
+    "terminal",
+    "github",
+    "gitlab",
+    "bitbucket",
+    "gitea",
+    "cli",
+    "git-client",
+    "multi-provider",
+    "git-desktop"
+  ],
+  "homepage": "https://github.com/ElioNeto/github-desktop-tui#readme",
+  "bugs": {
+    "url": "https://github.com/ElioNeto/github-desktop-tui/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ElioNeto/github-desktop-tui.git"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Elio Neto",
+    "email": "elio.neto@example.com",
+    "url": "https://github.com/ElioNeto"
+  },
+  "type": "module",
+  "bin": {
+    "github-desktop-tui": "./bin/github-desktop-tui.js"
+  },
+  "files": [
+    "bin/",
+    "install.js",
+    "platforms/",
+    "README.md"
+  ],
+  "scripts": {
+    "postinstall": "node install.js",
+    "prepublishOnly": "node install.js --check",
+    "start": "github-desktop-tui",
+    "test": "echo 'No npm tests yet. Use make test for Go tests.'"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "os": [
+    "linux",
+    "darwin",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/ElioNeto"
+  }
+}
